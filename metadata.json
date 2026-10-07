@@ -1,0 +1,9 @@
+{
+  "name": "Carnet Auto — Votre voiture, en toute sérénité",
+  "description": "Votre carnet automobile personnel : trajets, carburant, entretiens, documents et échéances, même hors connexion.",
+  "requestFrame": {
+    "capabilities": [
+      "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+    ]
+  }
+}
