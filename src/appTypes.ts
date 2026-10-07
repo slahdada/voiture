@@ -8,6 +8,7 @@ export type ModalState =
   | { type: "settings" }
   | { type: "vehicles" }
   | { type: "transfer" }
+  | { type: "auth" }
   | null;
 export interface InstallEvent extends Event {
   prompt(): Promise<void>;

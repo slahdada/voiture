@@ -10,7 +10,10 @@ import {
   ShieldCheck,
   Maximize,
   Share2,
+  Mail,
 } from "lucide-react";
+import type { User as FirebaseUser } from "firebase/auth";
+import { AuthModal } from "./AuthModal";
 import { Capacitor } from "@capacitor/core";
 import { Modal, Field, AttachmentImage, AttachmentView } from "./ui";
 import { VehicleForm, EntryForm, DeadlineForm } from "./forms";
@@ -46,6 +49,7 @@ interface Props {
   setNotice: (s: string) => void;
   install?: InstallEvent;
   setInstall: (s: InstallEvent | undefined) => void;
+  currentUser?: FirebaseUser | null;
 }
 export function AppDialogs({
   state,
@@ -65,6 +69,7 @@ export function AppDialogs({
   setNotice,
   install,
   setInstall,
+  currentUser,
 }: Props) {
   return (
     <>
@@ -379,6 +384,36 @@ export function AppDialogs({
             </button>
           </form>
           <section className="settings-section">
+            <h3>Compte & Connexion e-mail</h3>
+            {currentUser ? (
+              <div>
+                <p>
+                  Connecté en tant que <strong>{currentUser.email}</strong>.
+                </p>
+                <button
+                  className="secondary full"
+                  onClick={() => setModal({ type: "auth" })}
+                >
+                  <Mail size={17} />
+                  Gérer mon compte & Cloud
+                </button>
+              </div>
+            ) : (
+              <div>
+                <p>
+                  Connectez-vous avec votre e-mail pour sauvegarder et synchroniser votre carnet dans le Cloud.
+                </p>
+                <button
+                  className="primary full"
+                  onClick={() => setModal({ type: "auth" })}
+                >
+                  <Mail size={17} />
+                  Se connecter avec e-mail
+                </button>
+              </div>
+            )}
+          </section>
+          <section className="settings-section">
             <h3>Vos données</h3>
             <p>
               Stockage local sur cet appareil, sans synchronisation entre
@@ -500,6 +535,17 @@ export function AppDialogs({
             onError={showError}
           />
         </Suspense>
+      )}
+      {modal?.type === "auth" && (
+        <AuthModal
+          onClose={() => setModal(null)}
+          state={state}
+          currentUser={currentUser ?? null}
+          onRestoreState={(restored) => {
+            void commit(restored, "Données restaurées depuis le Cloud.");
+          }}
+          onNotice={(msg) => setNotice(msg)}
+        />
       )}
     </>
   );

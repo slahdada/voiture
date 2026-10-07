@@ -1,0 +1,58 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile document",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth user ID"
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name of the user"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of the last update"
+        }
+      },
+      "required": ["userId", "email"]
+    },
+    "CarnetBackup": {
+      "title": "CarnetBackup",
+      "description": "User cloud backup containing vehicle records",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID"
+        },
+        "stateJson": {
+          "type": "string",
+          "description": "Serialized carnet JSON"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last backup timestamp"
+        }
+      },
+      "required": ["userId", "stateJson", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile document"
+    },
+    "/users/{userId}/backups/{backupId}": {
+      "schema": "CarnetBackup",
+      "description": "User cloud backups"
+    }
+  }
+}

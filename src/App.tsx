@@ -54,12 +54,16 @@ import {
 } from "./Dashboard";
 import { exportCsv, report, backup } from "./io";
 import { scheduleNotifications } from "./native";
+import { auth } from "./firebase";
+import { onAuthStateChanged, type User as FirebaseUser } from "firebase/auth";
+import { Mail } from "lucide-react";
 const Transfers = lazy(() =>
   import("./Transfers").then((m) => ({ default: m.Transfers })),
 );
 import type { Page, ModalState, InstallEvent } from "./appTypes";
 export default function App() {
   const [state, setState] = useState<State>(emptyState);
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [page, setPage] = useState<Page>("home");
@@ -115,6 +119,12 @@ export default function App() {
       window.removeEventListener("beforeinstallprompt", ready);
       document.removeEventListener("fullscreenchange", full);
     };
+  }, []);
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setCurrentUser(u);
+    });
+    return () => unsub();
   }, []);
   useEffect(() => {
     if (!notice) return;
@@ -435,6 +445,33 @@ export default function App() {
             Documents
           </button>
         </nav>
+        <div className="sidebar-auth-box">
+          {currentUser ? (
+            <button
+              className="user-badge-btn"
+              onClick={() => setModal({ type: "auth" })}
+              title="Gérer mon compte"
+            >
+              <span className="user-avatar-dot">
+                {currentUser.email ? currentUser.email[0].toUpperCase() : "U"}
+              </span>
+              <div className="user-badge-meta">
+                <span className="user-email-label truncate">
+                  {currentUser.email}
+                </span>
+                <span className="user-status-text">Connecté avec e-mail</span>
+              </div>
+            </button>
+          ) : (
+            <button
+              className="email-login-nav-btn"
+              onClick={() => setModal({ type: "auth" })}
+            >
+              <Mail size={18} />
+              <span>Se connecter avec e-mail</span>
+            </button>
+          )}
+        </div>
         <div className="sidebar-tip">
           <ShieldCheck size={25} />
           <strong>Votre carnet vous appartient.</strong>
@@ -471,6 +508,16 @@ export default function App() {
             </strong>
           </div>
           <div className="header-actions">
+            <button
+              className={`secondary auth-header-button ${currentUser ? "is-connected" : ""}`}
+              onClick={() => setModal({ type: "auth" })}
+              title={currentUser ? `Connecté avec ${currentUser.email}` : "Se connecter avec e-mail"}
+            >
+              <Mail size={16} />
+              <span className="auth-header-label">
+                {currentUser ? (currentUser.email?.split("@")[0] || "Compte") : "Se connecter avec e-mail"}
+              </span>
+            </button>
             <button
               className="vehicle-switch secondary"
               onClick={() => setModal({ type: "vehicles" })}
