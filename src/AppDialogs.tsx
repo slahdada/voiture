@@ -530,7 +530,7 @@ export function AppDialogs({
         >
           <Transfers
             state={state}
-            onChange={setState}
+            onChange={(s) => void commit(s, "Données importées et synchronisées.")}
             onClose={() => setModal(null)}
             onError={showError}
           />

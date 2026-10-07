@@ -10,7 +10,9 @@ import {
   CalendarDays,
   ShieldCheck,
   TrendingUp,
+  FileText,
 } from "lucide-react";
+import { generateMaintenanceReport } from "./io";
 import { AttachmentImage, Empty } from "./ui";
 import {
   currentKm,
@@ -85,6 +87,7 @@ export function Dashboard({
   openEntry,
   openCarnet,
   openDeadlines,
+  act,
 }: {
   state: State;
   vehicle?: Vehicle;
@@ -95,6 +98,7 @@ export function Dashboard({
   openEntry: (e: Entry) => void;
   openCarnet: () => void;
   openDeadlines: () => void;
+  act: (fn: () => Promise<void>) => Promise<void>;
 }) {
   const km = vehicle ? currentKm(vehicle, entries) : undefined;
   const month = today().slice(0, 7);
@@ -189,6 +193,24 @@ export function Dashboard({
                   Données sur cet appareil
                 </span>
               </div>
+              {vehicle && (
+                <button
+                  className="secondary full"
+                  style={{ marginTop: "15px", minHeight: "42px", gap: "8px", width: "100%" }}
+                  onClick={() =>
+                    void act(() =>
+                      generateMaintenanceReport(
+                        entries,
+                        vehicle,
+                        state.settings.currency,
+                      )
+                    )
+                  }
+                >
+                  <FileText size={16} />
+                  Dossier d'Entretien (PDF)
+                </button>
+              )}
             </div>
             <AttachmentImage
               id={vehicle?.photoId}

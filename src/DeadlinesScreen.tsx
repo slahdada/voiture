@@ -1,4 +1,5 @@
-import { Plus, CalendarDays, Pencil, Check, Trash2 } from "lucide-react";
+import { Plus, CalendarDays, Pencil, Check, Trash2, FileText } from "lucide-react";
+import { generateDeadlinesReport } from "./io";
 import { Empty } from "./ui";
 import {
   today,
@@ -41,17 +42,28 @@ export function DeadlinesScreen({
             {km !== undefined ? ` : ${km.toLocaleString("fr-FR")} km` : "."}.
           </p>
         </div>
-        <button
-          className="primary"
-          onClick={() =>
-            vehicle
-              ? setModal({ type: "deadline" })
-              : setModal({ type: "vehicle" })
-          }
-        >
-          <Plus size={18} />
-          Ajouter une échéance
-        </button>
+        <div className="flex gap-2" style={{ display: "flex", gap: "8px" }}>
+          {deadlines.length > 0 && (
+            <button
+              className="secondary"
+              onClick={() => void act(() => generateDeadlinesReport(deadlines, vehicle, state.settings.currency, km))}
+            >
+              <FileText size={18} />
+              Exporter PDF
+            </button>
+          )}
+          <button
+            className="primary"
+            onClick={() =>
+              vehicle
+                ? setModal({ type: "deadline" })
+                : setModal({ type: "vehicle" })
+            }
+          >
+            <Plus size={18} />
+            Ajouter une échéance
+          </button>
+        </div>
       </div>
       <p className="info">
         <CalendarDays size={19} />

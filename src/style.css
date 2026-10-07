@@ -254,14 +254,31 @@ small {
   color: #a1aaa1;
 }
 .online,
-.offline {
+.offline,
+.pending {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: #579b65;
 }
 .offline {
+  background: #cbd5e1;
+}
+.pending {
   background: #d79b41;
+  box-shadow: 0 0 0 0 rgba(215, 155, 65, 0.7);
+  animation: pulse-orange 1.6s infinite;
+}
+@keyframes pulse-orange {
+  0% {
+    box-shadow: 0 0 0 0 rgba(215, 155, 65, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 5px rgba(215, 155, 65, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(215, 155, 65, 0);
+  }
 }
 .workspace {
   margin-left: 238px;

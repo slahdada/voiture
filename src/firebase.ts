@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore, doc, getDocFromServer } from "firebase/firestore";
+import { getFirestore, doc, getDocFromServer, setDoc, getDoc } from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
 
 const app = initializeApp(firebaseConfig);
@@ -72,3 +72,48 @@ export function handleFirestoreError(
   console.error("Firestore Error: ", JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
+
+export async function syncStateToFirestore(state: any, email: string): Promise<boolean> {
+  const path = `users/${email}`;
+  try {
+    const docRef = doc(db, "users", email);
+    await setDoc(docRef, {
+      email,
+      stateJson: JSON.stringify(state),
+      updatedAt: new Date().toISOString(),
+    });
+    return true;
+  } catch (error) {
+    console.error("Sync failed:", error);
+    try {
+      handleFirestoreError(error, OperationType.WRITE, path);
+    } catch {
+      // Return false instead of blocking
+    }
+    return false;
+  }
+}
+
+export async function fetchStateFromFirestore(email: string): Promise<any | null> {
+  const path = `users/${email}`;
+  try {
+    const docRef = doc(db, "users", email);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      if (data?.stateJson) {
+        return JSON.parse(data.stateJson);
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error("Fetch failed:", error);
+    try {
+      handleFirestoreError(error, OperationType.GET, path);
+    } catch {
+      // Return null instead of blocking
+    }
+    return null;
+  }
+}
+

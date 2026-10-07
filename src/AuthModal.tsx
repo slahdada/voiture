@@ -45,7 +45,8 @@ export function AuthModal({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
+  const [backingUp, setBackingUp] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [cloudBackupDate, setCloudBackupDate] = useState<string | null>(null);
@@ -55,12 +56,11 @@ export function AuthModal({
       // Check if user has an existing cloud backup
       const checkBackup = async () => {
         try {
+          const userEmail = currentUser.email || "slahdada@gmail.com";
           const backupRef = doc(
             db,
             "users",
-            currentUser.uid,
-            "backups",
-            "latest",
+            userEmail,
           );
           const snap = await getDoc(backupRef);
           if (snap.exists()) {
@@ -200,15 +200,16 @@ export function AuthModal({
   const handleBackupToCloud = async () => {
     if (!currentUser) return;
     setError(null);
-    setSyncing(true);
-    const backupPath = `users/${currentUser.uid}/backups/latest`;
+    setBackingUp(true);
+    const userEmail = currentUser.email || "slahdada@gmail.com";
+    const backupPath = `users/${userEmail}`;
     try {
       const payload = {
-        userId: currentUser.uid,
+        email: userEmail,
         stateJson: JSON.stringify(state),
         updatedAt: new Date().toISOString(),
       };
-      await setDoc(doc(db, "users", currentUser.uid, "backups", "latest"), payload);
+      await setDoc(doc(db, "users", userEmail), payload);
       const nowStr = new Date().toLocaleString("fr-FR");
       setCloudBackupDate(nowStr);
       setSuccess(`Carnet sauvegardé dans le Cloud (${nowStr}).`);
@@ -220,18 +221,19 @@ export function AuthModal({
         setError(e instanceof Error ? e.message : String(e));
       }
     } finally {
-      setSyncing(false);
+      setBackingUp(false);
     }
   };
 
   const handleRestoreFromCloud = async () => {
     if (!currentUser) return;
     setError(null);
-    setSyncing(true);
-    const backupPath = `users/${currentUser.uid}/backups/latest`;
+    setRestoring(true);
+    const userEmail = currentUser.email || "slahdada@gmail.com";
+    const backupPath = `users/${userEmail}`;
     try {
       const snap = await getDoc(
-        doc(db, "users", currentUser.uid, "backups", "latest"),
+        doc(db, "users", userEmail),
       );
       if (!snap.exists()) {
         setError("Aucune sauvegarde Cloud trouvée pour ce compte.");
@@ -258,7 +260,7 @@ export function AuthModal({
         setError(e instanceof Error ? e.message : String(e));
       }
     } finally {
-      setSyncing(false);
+      setRestoring(false);
     }
   };
 
@@ -312,9 +314,9 @@ export function AuthModal({
                 type="button"
                 className="secondary flex items-center justify-center gap-2 text-xs py-2"
                 onClick={() => void handleBackupToCloud()}
-                disabled={syncing}
+                disabled={backingUp || restoring}
               >
-                {syncing ? (
+                {backingUp ? (
                   <Loader2 size={15} className="animate-spin" />
                 ) : (
                   <CloudUpload size={15} />
@@ -325,9 +327,9 @@ export function AuthModal({
                 type="button"
                 className="secondary flex items-center justify-center gap-2 text-xs py-2"
                 onClick={() => void handleRestoreFromCloud()}
-                disabled={syncing}
+                disabled={backingUp || restoring}
               >
-                {syncing ? (
+                {restoring ? (
                   <Loader2 size={15} className="animate-spin" />
                 ) : (
                   <CloudDownload size={15} />

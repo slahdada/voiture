@@ -54,7 +54,8 @@ import {
 } from "./Dashboard";
 import { exportCsv, report, backup } from "./io";
 import { scheduleNotifications } from "./native";
-import { auth } from "./firebase";
+import { auth, syncStateToFirestore, fetchStateFromFirestore, db, handleFirestoreError, OperationType } from "./firebase";
+import { onSnapshot, doc } from "firebase/firestore";
 import { onAuthStateChanged, type User as FirebaseUser } from "firebase/auth";
 import { Mail } from "lucide-react";
 const Transfers = lazy(() =>
@@ -64,6 +65,9 @@ import type { Page, ModalState, InstallEvent } from "./appTypes";
 export default function App() {
   const [state, setState] = useState<State>(emptyState);
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [syncStatus, setSyncStatus] = useState<"synced" | "pending" | "offline">(
+    !navigator.onLine ? "offline" : localStorage.getItem("sync_pending") === "true" ? "pending" : "synced"
+  );
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [page, setPage] = useState<Page>("home");
@@ -82,6 +86,24 @@ export default function App() {
   const [fullscreen, setFullscreen] = useState(false);
   const ref = useRef(state);
   ref.current = state;
+
+  const tryBackgroundSync = async (currentState: State, userEmail?: string) => {
+    const email = userEmail || auth.currentUser?.email || "slahdada@gmail.com";
+    if (!navigator.onLine) {
+      setSyncStatus("offline");
+      return;
+    }
+    setSyncStatus("pending");
+    const success = await syncStateToFirestore(currentState, email);
+    if (success) {
+      setSyncStatus("synced");
+      localStorage.removeItem("sync_pending");
+    } else {
+      setSyncStatus("pending");
+      localStorage.setItem("sync_pending", "true");
+    }
+  };
+
   const showError = (e: unknown) => {
     const message =
       e instanceof Error
@@ -90,20 +112,53 @@ export default function App() {
     setError(message);
     window.dispatchEvent(new CustomEvent("app-error", { detail: message }));
   };
+
   useEffect(() => {
     storage
       .load()
-      .then((s) => {
+      .then(async (s) => {
         validateState(s);
-        setState(s);
+        let finalState = s;
+
+        const email = auth.currentUser?.email || "slahdada@gmail.com";
+        if (navigator.onLine) {
+          try {
+            const cloudState = await fetchStateFromFirestore(email);
+            if (cloudState && Array.isArray(cloudState.vehicles) && cloudState.vehicles.length > 0) {
+              const localEmpty = s.vehicles.length === 0;
+              if (localEmpty) {
+                finalState = cloudState;
+                await storage.save(cloudState);
+              }
+            }
+          } catch (e) {
+            console.warn("Startup cloud fetch failed:", e);
+          }
+        }
+
+        setState(finalState);
         setLoadFailed(false);
+
+        if (localStorage.getItem("sync_pending") === "true") {
+          void tryBackgroundSync(finalState);
+        }
       })
       .catch((e) => {
         setLoadFailed(true);
         showError(e);
       })
       .finally(() => setLoading(false));
-    const network = () => setOnline(navigator.onLine);
+
+    const network = () => {
+      const isOnline = navigator.onLine;
+      setOnline(isOnline);
+      if (!isOnline) {
+        setSyncStatus("offline");
+      } else {
+        void tryBackgroundSync(ref.current);
+      }
+    };
+
     const ready = (e: Event) => {
       e.preventDefault();
       setInstall(e as InstallEvent);
@@ -120,12 +175,79 @@ export default function App() {
       document.removeEventListener("fullscreenchange", full);
     };
   }, []);
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       setCurrentUser(u);
     });
     return () => unsub();
   }, []);
+
+  useEffect(() => {
+    if (currentUser && navigator.onLine) {
+      const email = currentUser.email || "slahdada@gmail.com";
+      const syncOnLogin = async () => {
+        try {
+          const cloudState = await fetchStateFromFirestore(email);
+          if (cloudState && Array.isArray(cloudState.vehicles) && cloudState.vehicles.length > 0) {
+            const localEmpty = state.vehicles.length === 0;
+            if (localEmpty) {
+              setState(cloudState);
+              await storage.save(cloudState);
+              setNotice("Carnet synchronisé depuis le Cloud.");
+            }
+          } else if (state.vehicles.length > 0) {
+            await syncStateToFirestore(state, email);
+          }
+        } catch (e) {
+          console.warn("Auth sync on login failed:", e);
+        }
+      };
+      void syncOnLogin();
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    const email = currentUser?.email || "slahdada@gmail.com";
+    const path = `users/${email}`;
+    const docRef = doc(db, "users", email);
+
+    const unsubscribe = onSnapshot(
+      docRef,
+      (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data();
+        if (data?.stateJson) {
+          try {
+            const cloudState = JSON.parse(data.stateJson) as State;
+            const cloudStr = JSON.stringify(cloudState);
+            const localStr = JSON.stringify(ref.current);
+
+            // Mise à jour immédiate si les données cloud diffèrent et pas d'envois en attente
+            if (cloudStr !== localStr && localStorage.getItem("sync_pending") !== "true") {
+              validateState(cloudState);
+              void storage.save(cloudState).then(() => {
+                setState(cloudState);
+                setSyncStatus("synced");
+              });
+            }
+          } catch (e) {
+            console.error("Failed to parse real-time sync state:", e);
+          }
+        }
+      },
+      (error) => {
+        try {
+          handleFirestoreError(error, OperationType.GET, path);
+        } catch (e) {
+          console.warn("Real-time listener warning:", e);
+        }
+      }
+    );
+
+    return () => unsubscribe();
+  }, [currentUser]);
+
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(""), 5000);
@@ -220,6 +342,22 @@ export default function App() {
     await storage.save(next);
     setState(next);
     setNotice(message);
+
+    const email = auth.currentUser?.email || "slahdada@gmail.com";
+    if (navigator.onLine) {
+      setSyncStatus("pending");
+      const success = await syncStateToFirestore(next, email);
+      if (success) {
+        setSyncStatus("synced");
+        localStorage.removeItem("sync_pending");
+      } else {
+        setSyncStatus("pending");
+        localStorage.setItem("sync_pending", "true");
+      }
+    } else {
+      setSyncStatus("offline");
+      localStorage.setItem("sync_pending", "true");
+    }
   }
   const vehicle =
     state.vehicles.find((v) => v.id === state.settings.selectedVehicle) ??
@@ -487,8 +625,10 @@ export default function App() {
             Paramètres
           </button>
           <span>
-            <i className={online ? "online" : "offline"} />
-            {online ? "Disponible hors connexion" : "Mode hors connexion"}
+            <i className={syncStatus === "synced" ? "online" : syncStatus === "offline" ? "offline" : "pending"} />
+            {syncStatus === "synced" && "Synchronisé au Cloud"}
+            {syncStatus === "pending" && "Synchro en attente…"}
+            {syncStatus === "offline" && "Mode hors connexion"}
           </span>
           <small>Carnet Auto · votre compagnon de route</small>
         </div>
@@ -582,6 +722,7 @@ export default function App() {
               openEntry={(entry) => setModal({ type: "detail", entry })}
               openCarnet={() => setPage("journal")}
               openDeadlines={() => setPage("deadlines")}
+              act={act}
             />
           ) : page === "journal" || page === "documents" ? (
             <JournalScreen
