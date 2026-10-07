@@ -99,7 +99,7 @@ export function AuthModal({
         case "auth/network-request-failed":
           return "Problème de réseau. Vérifiez votre connexion internet.";
         default:
-          return (err as Error).message || "Une erreur est survenue lors de la connexion.";
+          return (err as any).message || "Une erreur est survenue lors de la connexion.";
       }
     }
     return err instanceof Error ? err.message : "Erreur inconnue";

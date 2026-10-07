@@ -637,6 +637,13 @@ export default function App() {
             <span>{n.label}</span>
           </button>
         ))}
+        <button
+          className={currentUser ? "connected-nav" : ""}
+          onClick={() => setModal({ type: "auth" })}
+        >
+          <Mail size={22} />
+          <span>{currentUser ? "Compte" : "Connexion"}</span>
+        </button>
       </nav>
       <AppDialogs
         {...{
@@ -657,6 +664,7 @@ export default function App() {
           setNotice,
           install,
           setInstall,
+          currentUser,
         }}
       />
       {error && (

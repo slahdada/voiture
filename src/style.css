@@ -2049,3 +2049,93 @@ small,
     padding-top: calc(12px + env(safe-area-inset-top));
   }
 }
+
+/* Sidebar Auth styling */
+.sidebar-auth-box {
+  margin: 15px 14px 5px;
+  display: flex;
+  flex-direction: column;
+}
+.user-badge-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #edf3e9;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+}
+.user-avatar-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--green);
+  color: white;
+  font-weight: bold;
+  border-radius: 50%;
+  font-size: 12px;
+}
+.user-badge-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.user-email-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #24392f;
+}
+.user-status-text {
+  font-size: 9px;
+  color: #579b65;
+  font-weight: 500;
+}
+.email-login-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: white;
+  border: 1px dashed #c0cbd3;
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #526354;
+  width: 100%;
+  font-weight: 500;
+}
+.email-login-nav-btn:hover {
+  background: #f7f9f6;
+  border-color: var(--green);
+  color: var(--green);
+}
+
+/* Header Auth Button */
+.auth-header-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  height: 44px;
+}
+.auth-header-button.is-connected {
+  background: #edf3e9;
+  border-color: #c9dec1;
+  color: var(--green);
+}
+.auth-header-label {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Bottom nav connection button */
+.bottom-nav button.connected-nav {
+  color: var(--green);
+}
+
