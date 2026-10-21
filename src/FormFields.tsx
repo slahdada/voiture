@@ -14,9 +14,9 @@ import { Field } from "./ui";
 import { storage } from "./storage";
 import { cameraFile } from "./native";
 import { validateEntry } from "./validation";
-import { decimals } from "./calculations";
+import { decimals, parseDecimal } from "./calculations";
 export const n = (s: FormDataEntryValue | null) =>
-  s === null || s === "" ? undefined : Number(String(s));
+  s === null ? undefined : parseDecimal(s);
 export const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 export function FilePicker({
   setFile,

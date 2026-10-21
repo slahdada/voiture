@@ -181,4 +181,50 @@ describe("Parcours interface", () => {
       expect((await storage.load()).deadlines[0].done).toBe(true),
     );
   });
+  it("calcule automatiquement les litres (montant ÷ prix/L), la distance (500 km) et la consommation (10,00 L/100 km)", async () => {
+    const s = await init();
+    s.entries = [
+      {
+        ...base(),
+        vehicleId: s.vehicles[0].id,
+        kind: "fuel",
+        title: "Plein initial",
+        date: "2026-01-01",
+        km: 120000,
+        unitPrice: 2.0,
+        quantity: 40,
+        amount: 80,
+        full: true,
+      },
+    ];
+    await storage.save(s);
+    render(<App />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /Un plein/ }));
+    // Le dernier prix par litre (2.000) est pré-rempli
+    expect(
+      (screen.getByLabelText("Prix par litre (TND)") as HTMLInputElement).value,
+    ).toBe("2.000");
+    await user.type(screen.getByLabelText("Kilométrage (km)"), "120500");
+    await user.type(screen.getByLabelText("Montant total (TND)"), "100,000");
+    await user.click(screen.getByLabelText(/Plein complet/));
+    // Quantité automatiquement calculée : 100 / 2 = 50.000
+    expect(
+      (screen.getByLabelText("Quantité (litres)") as HTMLInputElement).value,
+    ).toBe("50.000");
+    expect(screen.getByText("500 km")).toBeDefined();
+    expect(screen.getByText("10,00 L/100 km")).toBeDefined();
+    await user.click(
+      screen.getByRole("button", { name: "Enregistrer l’entrée" }),
+    );
+    await waitFor(async () =>
+      expect((await storage.load()).entries).toHaveLength(2),
+    );
+    const saved = (await storage.load()).entries.find(
+      (e) => e.km === 120500,
+    );
+    expect(saved?.quantity).toBe(50);
+    expect(saved?.amount).toBe(100);
+    expect(saved?.unitPrice).toBe(2);
+  });
 });

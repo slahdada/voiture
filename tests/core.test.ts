@@ -7,6 +7,11 @@ import {
   tripDistance,
   status,
   kmWarnings,
+  analyzeFuelEntries,
+  fuelStats,
+  lastFuelUnitPrice,
+  parseDecimal,
+  fmtDecimal,
 } from "../src/calculations";
 import { emptyState, base, type Entry, type Vehicle } from "../src/types";
 import { validateEntry, validateState } from "../src/validation";
@@ -77,6 +82,144 @@ describe("Calculs métier", () => {
     ];
     expect(consumption(e)[0].value).toBe(6);
     expect(consumption(e)[0].litres).toBe(60);
+  });
+  it("vérifie l'exemple de test de la section 6 (120 000 -> 120 500 km, 100 TND à 2 TND/L = 50 L, 500 km, 10,00 L/100 km)", () => {
+    const p1 = entry({
+      id: "plein-1",
+      kind: "fuel",
+      date: "2026-01-01",
+      km: 120000,
+      amount: 80,
+      unitPrice: 2.0,
+      quantity: 40,
+      full: true,
+    });
+    const p2 = entry({
+      id: "plein-2",
+      kind: "fuel",
+      date: "2026-01-10",
+      km: 120500,
+      amount: 100.0,
+      unitPrice: 2.0,
+      quantity: 100.0 / 2.0,
+      full: true,
+    });
+    const stats = fuelStats([p1, p2], vehicle.id);
+    const a1 = stats.byId.get("plein-1")!;
+    const a2 = stats.byId.get("plein-2")!;
+    expect(a1.consumptionStatus).toBe("insufficient_data");
+    expect(a1.consumptionLabel).toBe("Données insuffisantes");
+    expect(a2.entry.quantity).toBe(50);
+    expect(fmtDecimal(a2.entry.quantity!, 3)).toBe("50,000");
+    expect(a2.distance).toBe(500);
+    expect(a2.consumption).toBe(10);
+    expect(a2.consumptionLabel).toBe("10,00 L/100 km");
+    expect(stats.lastConsumptionLabel).toBe("10,00 L/100 km");
+    expect(stats.averageConsumptionLabel).toBe("10,00 L/100 km");
+  });
+  it("gère les pleins partiels (« En attente d’un plein complet »), sépare les véhicules et recalcule après ajout rétroactif ou suppression", () => {
+    const v2Id = "vehicule-2";
+    const f1 = entry({
+      id: "f1",
+      kind: "fuel",
+      date: "2026-01-01",
+      km: 10000,
+      quantity: 40,
+      amount: 80,
+      unitPrice: 2,
+      full: true,
+    });
+    const f2Partial = entry({
+      id: "f2",
+      kind: "fuel",
+      date: "2026-01-05",
+      km: 10300,
+      quantity: 15,
+      amount: 30,
+      unitPrice: 2,
+      full: false,
+    });
+    const otherVehicleEntry = entry({
+      id: "other-v",
+      vehicleId: v2Id,
+      kind: "fuel",
+      date: "2026-01-06",
+      km: 99999,
+      quantity: 60,
+      amount: 120,
+      unitPrice: 2,
+      full: true,
+    });
+
+    const mapWaiting = analyzeFuelEntries(
+      [f1, f2Partial, otherVehicleEntry],
+      vehicle.id,
+    );
+    expect(mapWaiting.get("f2")?.distance).toBe(300);
+    expect(mapWaiting.get("f2")?.consumptionStatus).toBe("waiting_full");
+    expect(mapWaiting.get("f2")?.consumptionLabel).toBe(
+      "En attente d’un plein complet",
+    );
+
+    const f3Full = entry({
+      id: "f3",
+      kind: "fuel",
+      date: "2026-01-12",
+      km: 10800,
+      quantity: 25,
+      amount: 50,
+      unitPrice: 2.1,
+      full: true,
+    });
+    const stats = fuelStats(
+      [f1, f2Partial, f3Full, otherVehicleEntry],
+      vehicle.id,
+    );
+    const a3 = stats.byId.get("f3")!;
+    expect(a3.distance).toBe(500); // 10800 - 10300
+    expect(a3.intervalDistance).toBe(800); // 10800 - 10000
+    expect(a3.intervalLitres).toBe(40); // 15 + 25 (f1's 40L excluded)
+    expect(a3.consumption).toBe(5); // (40 / 800) * 100 = 5.00 L/100km
+    expect(lastFuelUnitPrice([f1, f2Partial, f3Full], vehicle.id)).toBe(2.1);
+
+    // Ajout d'un second intervalle valide pour vérifier la moyenne pondérée
+    const f4Full = entry({
+      id: "f4",
+      kind: "fuel",
+      date: "2026-01-20",
+      km: 11000, // +200 km
+      quantity: 20, // 10.00 L/100km sur cet intervalle
+      amount: 42,
+      unitPrice: 2.1,
+      full: true,
+    });
+    const stats2 = fuelStats([f1, f2Partial, f3Full, f4Full], vehicle.id);
+    // Total litres valides = 40 + 20 = 60 L ; Total km valides = 800 + 200 = 1000 km -> Moyenne = 6,00 L/100 km (et non (5+10)/2 = 7,5)
+    expect(stats2.averageConsumption).toBe(6);
+    expect(stats2.averageConsumptionLabel).toBe("6,00 L/100 km");
+  });
+  it("signale une erreur si le kilométrage est inférieur ou égal au plein précédent et accepte virgule/point", () => {
+    expect(parseDecimal("2,000")).toBe(2);
+    expect(parseDecimal("100.500")).toBe(100.5);
+    const f1 = entry({
+      id: "f1",
+      kind: "fuel",
+      date: "2026-01-01",
+      km: 5000,
+      quantity: 40,
+      full: true,
+    });
+    const f2Equal = entry({
+      id: "f2",
+      kind: "fuel",
+      date: "2026-01-05",
+      km: 5000,
+      quantity: 30,
+      full: true,
+    });
+    const map = analyzeFuelEntries([f1, f2Equal], vehicle.id);
+    expect(map.get("f2")?.kmError).toBe(true);
+    expect(map.get("f2")?.consumption).toBeUndefined();
   });
   it("ne calcule pas avec des volumes manquants ni un seul plein", () => {
     expect(

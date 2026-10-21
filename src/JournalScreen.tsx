@@ -8,6 +8,7 @@ import {
   Printer,
   Share2,
   BookOpen,
+  Fuel,
 } from "lucide-react";
 import { Field, Empty } from "./ui";
 import {
@@ -18,7 +19,13 @@ import {
   type Kind,
 } from "./types";
 import { EntryIcon, fmtDate, money } from "./Dashboard";
-import { total } from "./calculations";
+import {
+  total,
+  analyzeFuelEntries,
+  fmtAmount,
+  fmtDecimal,
+  fmtLitres,
+} from "./calculations";
 import { exportCsv, report } from "./io";
 import type { ModalState, Page } from "./appTypes";
 interface Props {
@@ -69,6 +76,12 @@ export function JournalScreen({
   setModal,
   act,
 }: Props) {
+  const fuelById = analyzeFuelEntries(state.entries);
+  const filteredFuels = filtered.filter((e) => e.kind === "fuel");
+  const currency = state.settings.currency;
+  const getVehicleName = (vId: string) =>
+    state.vehicles.find((v) => v.id === vId)?.name ?? vehicle?.name ?? "—";
+
   return (
     <>
       <div className="page-heading">
@@ -84,13 +97,21 @@ export function JournalScreen({
             {filtered.length} entrée(s)
           </p>
         </div>
-        <button
-          className="primary"
-          onClick={() => add(page === "documents" ? "document" : "trip")}
-        >
-          <Plus size={18} />
-          Ajouter {page === "documents" ? "un document" : "une entrée"}
-        </button>
+        <div className="actions">
+          {page !== "documents" && (
+            <button className="secondary" onClick={() => add("fuel")}>
+              <Fuel size={18} />
+              Ajouter un plein
+            </button>
+          )}
+          <button
+            className="primary"
+            onClick={() => add(page === "documents" ? "document" : "trip")}
+          >
+            <Plus size={18} />
+            Ajouter {page === "documents" ? "un document" : "une entrée"}
+          </button>
+        </div>
       </div>
       <section className="panel journal-panel">
         <div className="journal-toolbar">
@@ -224,6 +245,129 @@ export function JournalScreen({
             </button>
           </div>
         </div>
+
+        {filteredFuels.length > 0 && page !== "documents" && (
+          <div
+            style={{
+              padding: "16px 24px",
+              borderBottom: "1px solid var(--border)",
+              overflowX: "auto",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "10px",
+              }}
+            >
+              <strong style={{ fontSize: "13px", color: "#194c3f" }}>
+                Historique des pleins de carburant
+              </strong>
+              <small>
+                Date | Véhicule | Compteur (km) | Distance (km) | Montant (
+                {currency}) | Prix/L | Litres | Plein complet | Consommation
+                (L/100 km)
+              </small>
+            </div>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                fontSize: "12px",
+                textAlign: "left",
+              }}
+            >
+              <thead>
+                <tr
+                  style={{
+                    borderBottom: "1px solid var(--border)",
+                    color: "#728077",
+                    fontSize: "10px",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  <th style={{ padding: "8px 6px" }}>Date</th>
+                  <th style={{ padding: "8px 6px" }}>Véhicule</th>
+                  <th style={{ padding: "8px 6px" }}>Compteur (km)</th>
+                  <th style={{ padding: "8px 6px" }}>Distance (km)</th>
+                  <th style={{ padding: "8px 6px" }}>Montant ({currency})</th>
+                  <th style={{ padding: "8px 6px" }}>Prix/L</th>
+                  <th style={{ padding: "8px 6px" }}>Litres</th>
+                  <th style={{ padding: "8px 6px" }}>Plein complet</th>
+                  <th style={{ padding: "8px 6px" }}>
+                    Consommation (L/100 km)
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredFuels.slice(0, limit).map((e) => {
+                  const fa = fuelById.get(e.id);
+                  return (
+                    <tr
+                      key={`fuel-row-${e.id}`}
+                      onClick={() => setModal({ type: "detail", entry: e })}
+                      style={{
+                        borderBottom: "1px solid #edf0e6",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <td style={{ padding: "10px 6px", whiteSpace: "nowrap" }}>
+                        {fmtDate(e.date)}
+                      </td>
+                      <td style={{ padding: "10px 6px" }}>
+                        {getVehicleName(e.vehicleId)}
+                      </td>
+                      <td style={{ padding: "10px 6px", whiteSpace: "nowrap" }}>
+                        {e.km !== undefined
+                          ? `${e.km.toLocaleString("fr-FR")} km`
+                          : "—"}
+                      </td>
+                      <td style={{ padding: "10px 6px", whiteSpace: "nowrap" }}>
+                        {fa?.kmError ? (
+                          <span className="danger">
+                            Erreur : kilométrage ≤ précédent
+                          </span>
+                        ) : fa?.distance !== undefined ? (
+                          `${fa.distance.toLocaleString("fr-FR")} km`
+                        ) : (
+                          "Données insuffisantes"
+                        )}
+                      </td>
+                      <td style={{ padding: "10px 6px", whiteSpace: "nowrap" }}>
+                        {e.amount !== undefined
+                          ? fmtAmount(e.amount, currency)
+                          : "—"}
+                      </td>
+                      <td style={{ padding: "10px 6px", whiteSpace: "nowrap" }}>
+                        {e.unitPrice !== undefined
+                          ? `${fmtDecimal(e.unitPrice, 3)} ${currency}/L`
+                          : "—"}
+                      </td>
+                      <td style={{ padding: "10px 6px", whiteSpace: "nowrap" }}>
+                        {e.quantity !== undefined ? fmtLitres(e.quantity) : "—"}
+                      </td>
+                      <td style={{ padding: "10px 6px" }}>
+                        {e.full === true ? "Oui" : "Non"}
+                      </td>
+                      <td
+                        style={{
+                          padding: "10px 6px",
+                          fontWeight:
+                            fa?.consumptionStatus === "valid" ? 600 : 400,
+                        }}
+                      >
+                        {fa?.consumptionLabel ?? "Données insuffisantes"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {filtered.length ? (
           <div className={view === "grid" ? "entry-grid" : "entry-table"}>
             {view === "list" && (
@@ -234,39 +378,67 @@ export function JournalScreen({
                 <span>MONTANT</span>
               </div>
             )}
-            {filtered.slice(0, limit).map((e) => (
-              <button
-                key={e.id}
-                className="entry-row"
-                onClick={() => setModal({ type: "detail", entry: e })}
-              >
-                <div>
-                  <EntryIcon kind={e.kind} />
+            {filtered.slice(0, limit).map((e) => {
+              const fa = e.kind === "fuel" ? fuelById.get(e.id) : undefined;
+              return (
+                <button
+                  key={e.id}
+                  className="entry-row"
+                  onClick={() => setModal({ type: "detail", entry: e })}
+                >
+                  <div>
+                    <EntryIcon kind={e.kind} />
+                    <span>
+                      <strong>{e.title}</strong>
+                      <small>
+                        {labels[e.kind]}
+                        {e.kind === "fuel"
+                          ? ` · ${getVehicleName(e.vehicleId)} · ${
+                              e.quantity !== undefined
+                                ? fmtLitres(e.quantity)
+                                : "—"
+                            }${
+                              e.unitPrice !== undefined
+                                ? ` à ${fmtDecimal(e.unitPrice, 3)} ${currency}/L`
+                                : ""
+                            } · Plein complet : ${e.full === true ? "Oui" : "Non"} · ${
+                              fa?.consumptionLabel ?? "Données insuffisantes"
+                            }`
+                          : ""}
+                        {e.attachmentId ? " · Pièce jointe" : ""}
+                      </small>
+                    </span>
+                  </div>
+                  <span>{fmtDate(e.date)}</span>
                   <span>
-                    <strong>{e.title}</strong>
-                    <small>
-                      {labels[e.kind]}
-                      {e.attachmentId ? " · Pièce jointe" : ""}
-                    </small>
+                    {e.kind === "trip"
+                      ? e.startKm !== undefined && e.endKm !== undefined
+                        ? `${e.endKm - e.startKm} km`
+                        : "Trajet incomplet"
+                      : e.kind === "fuel"
+                        ? `${
+                            e.km !== undefined
+                              ? `${e.km.toLocaleString("fr-FR")} km`
+                              : "—"
+                          }${
+                            fa?.distance !== undefined
+                              ? ` (+${fa.distance.toLocaleString("fr-FR")} km)`
+                              : fa?.kmError
+                                ? " (Erreur km)"
+                                : ""
+                          }`
+                        : e.km !== undefined
+                          ? `${e.km.toLocaleString("fr-FR")} km`
+                          : "—"}
                   </span>
-                </div>
-                <span>{fmtDate(e.date)}</span>
-                <span>
-                  {e.kind === "trip"
-                    ? e.startKm !== undefined && e.endKm !== undefined
-                      ? `${e.endKm - e.startKm} km`
-                      : "Trajet incomplet"
-                    : e.km !== undefined
-                      ? `${e.km.toLocaleString("fr-FR")} km`
+                  <strong>
+                    {e.amount !== undefined
+                      ? money(e.amount, state.settings.currency)
                       : "—"}
-                </span>
-                <strong>
-                  {e.amount !== undefined
-                    ? money(e.amount, state.settings.currency)
-                    : "—"}
-                </strong>
-              </button>
-            ))}
+                  </strong>
+                </button>
+              );
+            })}
           </div>
         ) : (
           <Empty

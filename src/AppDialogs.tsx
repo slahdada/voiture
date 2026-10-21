@@ -18,6 +18,7 @@ import { Capacitor } from "@capacitor/core";
 import { Modal, Field, AttachmentImage, AttachmentView } from "./ui";
 import { VehicleForm, EntryForm, DeadlineForm } from "./forms";
 import { EntryIcon, derivedDeadlines, fmtDate, money } from "./Dashboard";
+import { analyzeFuelEntries, fmtUnitPrice, fmtLitres } from "./calculations";
 import { backup, report } from "./io";
 import { scheduleNotifications } from "./native";
 import {
@@ -170,6 +171,8 @@ export function AppDialogs({
             entry={modal.entry}
             kind={modal.kind}
             vehicle={vehicle}
+            vehicles={state.vehicles}
+            entries={state.entries}
             categories={[
               ...new Set([
                 ...state.settings.categories,
@@ -199,115 +202,157 @@ export function AppDialogs({
           />
         </Modal>
       )}
-      {modal?.type === "detail" && (
-        <Modal title={modal.entry.title} onClose={() => setModal(null)} wide>
-          <div className="detail-heading">
-            <EntryIcon kind={modal.entry.kind} />
-            <span>
-              {labels[modal.entry.kind]} · {fmtDate(modal.entry.date)}
-            </span>
-          </div>
-          <dl className="detail-grid">
-            {Object.entries(modal.entry)
-              .filter(
-                ([k, v]) =>
-                  ![
-                    "id",
-                    "vehicleId",
-                    "createdAt",
-                    "updatedAt",
-                    "kind",
-                    "title",
-                    "date",
-                    "attachmentId",
-                  ].includes(k) &&
-                  v !== undefined &&
-                  v !== "",
+      {modal?.type === "detail" && (() => {
+        const fuelAnalysis =
+          modal.entry.kind === "fuel"
+            ? analyzeFuelEntries(state.entries, modal.entry.vehicleId).get(
+                modal.entry.id,
               )
-              .map(([k, v]) => (
-                <div key={k}>
-                  <dt>
-                    {(
-                      {
-                        km: "Kilométrage (km)",
-                        startKm: "Compteur départ (km)",
-                        endKm: "Compteur arrivée (km)",
-                        quantity:
-                          modal.entry.kind === "charge"
-                            ? "Énergie achetée (kWh)"
-                            : "Carburant acheté (L)",
-                        unitPrice: "Prix unitaire",
-                        amount: "Montant",
-                        full: "Plein complet",
-                        purpose: "Motif",
-                        origin: "Origine",
-                        destination: "Destination",
-                        driver: "Conducteur",
-                        category: "Catégorie",
-                        garage: "Garage / station",
-                        reference: "Référence",
-                        notes: "Notes",
-                        expiry: "Expiration",
-                        nextDate: "Prochaine date",
-                        nextKm: "Prochain kilométrage",
-                      } as Record<string, string>
-                    )[k] ?? k}
-                  </dt>
-                  <dd>
-                    {typeof v === "boolean"
-                      ? v
-                        ? "Oui"
-                        : "Non"
-                      : k === "amount"
-                        ? money(Number(v), state.settings.currency)
-                        : String(v)}
-                  </dd>
+            : undefined;
+        const entryVehicle =
+          state.vehicles.find((v) => v.id === modal.entry.vehicleId) ?? vehicle;
+        return (
+          <Modal title={modal.entry.title} onClose={() => setModal(null)} wide>
+            <div className="detail-heading">
+              <EntryIcon kind={modal.entry.kind} />
+              <span>
+                {labels[modal.entry.kind]} · {fmtDate(modal.entry.date)}
+                {entryVehicle ? ` · ${entryVehicle.name}` : ""}
+              </span>
+            </div>
+            <dl className="detail-grid">
+              {modal.entry.kind === "fuel" && entryVehicle && (
+                <div>
+                  <dt>Véhicule</dt>
+                  <dd>{entryVehicle.name}</dd>
                 </div>
-              ))}
-          </dl>
-          {modal.entry.attachmentId && (
-            <AttachmentView id={modal.entry.attachmentId} onError={showError} />
-          )}
-          <div className="actions detail-actions">
-            <button
-              className="primary"
-              onClick={() =>
-                setModal({
-                  type: "entry",
-                  entry: modal.entry,
-                  kind: modal.entry.kind,
-                })
-              }
-            >
-              <Pencil size={17} />
-              Modifier
-            </button>
-            <button
-              className="secondary"
-              onClick={() =>
-                void act(() =>
-                  report(
-                    [modal.entry],
-                    vehicle?.name ?? "",
-                    state.settings.currency,
-                    true,
-                  ),
+              )}
+              {Object.entries(modal.entry)
+                .filter(
+                  ([k, v]) =>
+                    ![
+                      "id",
+                      "vehicleId",
+                      "createdAt",
+                      "updatedAt",
+                      "kind",
+                      "title",
+                      "date",
+                      "attachmentId",
+                    ].includes(k) &&
+                    v !== undefined &&
+                    v !== "",
                 )
-              }
-            >
-              <Share2 size={17} />
-              Partager le rapport
-            </button>
-            <button
-              className="danger-button"
-              onClick={() => void act(() => deleteEntry(modal.entry))}
-            >
-              <Trash2 size={17} />
-              Supprimer
-            </button>
-          </div>
-        </Modal>
-      )}
+                .map(([k, v]) => (
+                  <div key={k}>
+                    <dt>
+                      {(
+                        {
+                          km: "Kilométrage (km)",
+                          startKm: "Compteur départ (km)",
+                          endKm: "Compteur arrivée (km)",
+                          quantity:
+                            modal.entry.kind === "charge"
+                              ? "Énergie achetée (kWh)"
+                              : "Carburant acheté (L)",
+                          unitPrice: "Prix par litre",
+                          amount: "Montant",
+                          full: "Plein complet",
+                          purpose: "Motif",
+                          origin: "Origine",
+                          destination: "Destination",
+                          driver: "Conducteur",
+                          category: "Catégorie",
+                          garage: "Garage / station",
+                          reference: "Référence",
+                          notes: "Notes",
+                          expiry: "Expiration",
+                          nextDate: "Prochaine date",
+                          nextKm: "Prochain kilométrage",
+                        } as Record<string, string>
+                      )[k] ?? k}
+                    </dt>
+                    <dd>
+                      {typeof v === "boolean"
+                        ? v
+                          ? "Oui"
+                          : "Non"
+                        : k === "amount"
+                          ? money(Number(v), state.settings.currency)
+                          : k === "unitPrice" && modal.entry.kind === "fuel"
+                            ? fmtUnitPrice(Number(v), state.settings.currency)
+                            : k === "quantity" && modal.entry.kind === "fuel"
+                              ? fmtLitres(Number(v))
+                              : String(v)}
+                    </dd>
+                  </div>
+                ))}
+              {fuelAnalysis && (
+                <>
+                  <div>
+                    <dt>Distance parcourue (km)</dt>
+                    <dd>
+                      {fuelAnalysis.kmError
+                        ? fuelAnalysis.kmErrorMessage
+                        : fuelAnalysis.distance !== undefined
+                          ? `${fuelAnalysis.distance.toLocaleString("fr-FR")} km`
+                          : "Données insuffisantes"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Consommation (L/100 km)</dt>
+                    <dd>{fuelAnalysis.consumptionLabel}</dd>
+                  </div>
+                </>
+              )}
+            </dl>
+            {modal.entry.attachmentId && (
+              <AttachmentView
+                id={modal.entry.attachmentId}
+                onError={showError}
+              />
+            )}
+            <div className="actions detail-actions">
+              <button
+                className="primary"
+                onClick={() =>
+                  setModal({
+                    type: "entry",
+                    entry: modal.entry,
+                    kind: modal.entry.kind,
+                  })
+                }
+              >
+                <Pencil size={17} />
+                Modifier
+              </button>
+              <button
+                className="secondary"
+                onClick={() =>
+                  void act(() =>
+                    report(
+                      [modal.entry],
+                      vehicle?.name ?? "",
+                      state.settings.currency,
+                      true,
+                    ),
+                  )
+                }
+              >
+                <Share2 size={17} />
+                Partager le rapport
+              </button>
+              <button
+                className="danger-button"
+                onClick={() => void act(() => deleteEntry(modal.entry))}
+              >
+                <Trash2 size={17} />
+                Supprimer
+              </button>
+            </div>
+          </Modal>
+        );
+      })()}
       {modal?.type === "settings" && (
         <Modal title="Paramètres" onClose={() => setModal(null)}>
           <form

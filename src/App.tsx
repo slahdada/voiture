@@ -87,7 +87,10 @@ export default function App() {
   const ref = useRef(state);
   ref.current = state;
 
+  const isTestEnv = import.meta.env.MODE === "test";
+
   const tryBackgroundSync = async (currentState: State, userEmail?: string) => {
+    if (isTestEnv) return;
     const email = userEmail || auth.currentUser?.email || "slahdada@gmail.com";
     if (!navigator.onLine) {
       setSyncStatus("offline");
@@ -121,7 +124,7 @@ export default function App() {
         let finalState = s;
 
         const email = auth.currentUser?.email || "slahdada@gmail.com";
-        if (navigator.onLine) {
+        if (navigator.onLine && !isTestEnv) {
           try {
             const cloudState = await fetchStateFromFirestore(email);
             if (cloudState && Array.isArray(cloudState.vehicles) && cloudState.vehicles.length > 0) {
@@ -139,7 +142,7 @@ export default function App() {
         setState(finalState);
         setLoadFailed(false);
 
-        if (localStorage.getItem("sync_pending") === "true") {
+        if (!isTestEnv && localStorage.getItem("sync_pending") === "true") {
           void tryBackgroundSync(finalState);
         }
       })
@@ -177,6 +180,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (isTestEnv) return;
     const unsub = onAuthStateChanged(auth, (u) => {
       setCurrentUser(u);
     });
@@ -184,6 +188,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (isTestEnv) return;
     if (currentUser && navigator.onLine) {
       const email = currentUser.email || "slahdada@gmail.com";
       const syncOnLogin = async () => {
@@ -208,6 +213,7 @@ export default function App() {
   }, [currentUser]);
 
   useEffect(() => {
+    if (isTestEnv) return;
     const email = currentUser?.email || "slahdada@gmail.com";
     const path = `users/${email}`;
     const docRef = doc(db, "users", email);
@@ -343,6 +349,7 @@ export default function App() {
     setState(next);
     setNotice(message);
 
+    if (isTestEnv) return;
     const email = auth.currentUser?.email || "slahdada@gmail.com";
     if (navigator.onLine) {
       setSyncStatus("pending");

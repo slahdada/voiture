@@ -1,5 +1,4 @@
 import {
-  Car,
   Gauge,
   Wallet,
   Fuel,
@@ -21,6 +20,10 @@ import {
   tripDistance,
   status,
   kmWarnings,
+  fuelStats,
+  fmtAmount,
+  fmtLitres,
+  fmtDecimal,
 } from "./calculations";
 import {
   today,
@@ -38,7 +41,13 @@ export const fmtDate = (s: string) =>
     year: "numeric",
   });
 export const money = (n: number, currency: string) =>
-  new Intl.NumberFormat("fr-FR", { style: "currency", currency }).format(n);
+  new Intl.NumberFormat("fr-FR", {
+    style: "currency",
+    currency,
+    ...(currency === "TND"
+      ? { minimumFractionDigits: 3, maximumFractionDigits: 3 }
+      : {}),
+  }).format(n);
 export function derivedDeadlines(
   entries: Entry[],
 ): (Deadline & { source: string })[] {
@@ -105,6 +114,8 @@ export function Dashboard({
   const monthEntries = entries.filter((e) => e.date.startsWith(month));
   const cons = consumption(entries);
   const last = cons.at(-1);
+  const fStats = fuelStats(entries, vehicle?.id);
+  const currency = state.settings.currency;
   const currentYear = today().slice(0, 4);
   const yearEntries = entries.filter((e) => e.date.startsWith(currentYear));
   const cats = [
@@ -196,14 +207,19 @@ export function Dashboard({
               {vehicle && (
                 <button
                   className="secondary full"
-                  style={{ marginTop: "15px", minHeight: "42px", gap: "8px", width: "100%" }}
+                  style={{
+                    marginTop: "15px",
+                    minHeight: "42px",
+                    gap: "8px",
+                    width: "100%",
+                  }}
                   onClick={() =>
                     void act(() =>
                       generateMaintenanceReport(
                         entries,
                         vehicle,
                         state.settings.currency,
-                      )
+                      ),
                     )
                   }
                 >
@@ -295,7 +311,7 @@ export function Dashboard({
             <Fuel size={19} />
           </span>
           <strong>
-            {last ? last.value.toFixed(1) : "—"}
+            {last ? fmtDecimal(last.value, 2) : fStats.lastConsumptionLabel}
             {last && <small> L/100 km</small>}
           </strong>
           <p>
@@ -316,6 +332,165 @@ export function Dashboard({
           <p>Tous les trajets complets · chevauchements fusionnés</p>
         </div>
       </div>
+
+      <section className="panel" style={{ marginBottom: "23px" }}>
+        <div className="section-head">
+          <div>
+            <p className="eyebrow">SUIVI DU CARBURANT</p>
+            <h2>Totaux et consommations de carburant</h2>
+          </div>
+          <button className="secondary" onClick={() => add("fuel")}>
+            <Plus size={16} />
+            Ajouter un plein
+          </button>
+        </div>
+        <div className="stats-grid" style={{ marginBottom: fStats.analyses.length > 0 ? "18px" : "0" }}>
+          <div className="stat">
+            <span>
+              Montant total des dépenses de carburant
+              <Wallet size={18} />
+            </span>
+            <strong>{fmtAmount(fStats.totalAmount, currency)}</strong>
+            <p>{fStats.analyses.length} plein(s) enregistré(s)</p>
+          </div>
+          <div className="stat">
+            <span>
+              Quantité totale de carburant achetée
+              <Fuel size={18} />
+            </span>
+            <strong>{fmtLitres(fStats.totalLitres)}</strong>
+            <p>Volume total acheté pour ce véhicule</p>
+          </div>
+          <div className="stat">
+            <span>
+              Dernière consommation calculée
+              <Gauge size={18} />
+            </span>
+            <strong style={{ fontSize: fStats.lastConsumption !== undefined ? "22px" : "15px" }}>
+              {fStats.lastConsumptionLabel}
+            </strong>
+            <p>
+              {fStats.lastConsumptionEntry
+                ? `${fmtDate(fStats.lastConsumptionEntry.fromDate!)} → ${fmtDate(fStats.lastConsumptionEntry.entry.date)}`
+                : "Entre deux pleins complets"}
+            </p>
+          </div>
+          <div className="stat">
+            <span>
+              Consommation moyenne sur les intervalles valides
+              <TrendingUp size={18} />
+            </span>
+            <strong style={{ fontSize: fStats.averageConsumption !== undefined ? "22px" : "15px" }}>
+              {fStats.averageConsumptionLabel}
+            </strong>
+            <p>
+              {fStats.totalValidDistance > 0
+                ? `${fmtDecimal(fStats.totalValidLitres, 3)} L ÷ ${fStats.totalValidDistance.toLocaleString("fr-FR")} km × 100`
+                : "Total litres valides ÷ total km valides × 100"}
+            </p>
+          </div>
+        </div>
+
+        {fStats.analyses.length > 0 && (
+          <div style={{ overflowX: "auto" }}>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                fontSize: "12px",
+                textAlign: "left",
+              }}
+            >
+              <thead>
+                <tr
+                  style={{
+                    borderBottom: "1px solid var(--border)",
+                    color: "#728077",
+                    fontSize: "10px",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  <th style={{ padding: "8px 6px" }}>Date</th>
+                  <th style={{ padding: "8px 6px" }}>Véhicule</th>
+                  <th style={{ padding: "8px 6px" }}>Compteur (km)</th>
+                  <th style={{ padding: "8px 6px" }}>Distance (km)</th>
+                  <th style={{ padding: "8px 6px" }}>Montant ({currency})</th>
+                  <th style={{ padding: "8px 6px" }}>Prix/L</th>
+                  <th style={{ padding: "8px 6px" }}>Litres</th>
+                  <th style={{ padding: "8px 6px" }}>Plein complet</th>
+                  <th style={{ padding: "8px 6px" }}>
+                    Consommation (L/100 km)
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...fStats.analyses].reverse().map((fa) => {
+                  const e = fa.entry;
+                  return (
+                    <tr
+                      key={`dash-fuel-${e.id}`}
+                      onClick={() => openEntry(e)}
+                      style={{
+                        borderBottom: "1px solid #edf0e6",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <td style={{ padding: "9px 6px", whiteSpace: "nowrap" }}>
+                        {fmtDate(e.date)}
+                      </td>
+                      <td style={{ padding: "9px 6px" }}>
+                        {vehicle?.name ?? "—"}
+                      </td>
+                      <td style={{ padding: "9px 6px", whiteSpace: "nowrap" }}>
+                        {e.km !== undefined
+                          ? `${e.km.toLocaleString("fr-FR")} km`
+                          : "—"}
+                      </td>
+                      <td style={{ padding: "9px 6px", whiteSpace: "nowrap" }}>
+                        {fa.kmError ? (
+                          <span className="danger">
+                            Erreur : kilométrage ≤ précédent
+                          </span>
+                        ) : fa.distance !== undefined ? (
+                          `${fa.distance.toLocaleString("fr-FR")} km`
+                        ) : (
+                          "Données insuffisantes"
+                        )}
+                      </td>
+                      <td style={{ padding: "9px 6px", whiteSpace: "nowrap" }}>
+                        {e.amount !== undefined
+                          ? fmtAmount(e.amount, currency)
+                          : "—"}
+                      </td>
+                      <td style={{ padding: "9px 6px", whiteSpace: "nowrap" }}>
+                        {e.unitPrice !== undefined
+                          ? `${fmtDecimal(e.unitPrice, 3)} ${currency}/L`
+                          : "—"}
+                      </td>
+                      <td style={{ padding: "9px 6px", whiteSpace: "nowrap" }}>
+                        {e.quantity !== undefined ? fmtLitres(e.quantity) : "—"}
+                      </td>
+                      <td style={{ padding: "9px 6px" }}>
+                        {e.full === true ? "Oui" : "Non"}
+                      </td>
+                      <td
+                        style={{
+                          padding: "9px 6px",
+                          fontWeight:
+                            fa.consumptionStatus === "valid" ? 600 : 400,
+                        }}
+                      >
+                        {fa.consumptionLabel}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       {vehicle && kmWarnings(vehicle, entries) && (
         <p className="warning">
           Des relevés kilométriques diminuent dans le temps. Vérifiez vos
@@ -522,12 +697,12 @@ export function Dashboard({
           <div className="consumption-list">
             {cons.slice(-6).map((c, i) => (
               <div key={i}>
-                <strong>{c.value.toFixed(2)} L/100 km</strong>
+                <strong>{fmtDecimal(c.value, 2)} L/100 km</strong>
                 <span>
                   {fmtDate(c.from)} → {fmtDate(c.date)}
                 </span>
                 <small>
-                  {c.litres.toFixed(3)} L ÷ {c.distance} km × 100 · pleins
+                  {fmtDecimal(c.litres, 3)} L ÷ {c.distance} km × 100 · pleins
                   intermédiaires compris
                 </small>
               </div>
