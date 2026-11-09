@@ -7,15 +7,30 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 
+export function isOfflineError(error: unknown): boolean {
+  if (typeof navigator !== "undefined" && !navigator.onLine) return true;
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    return (
+      msg.includes("offline") ||
+      msg.includes("unavailable") ||
+      msg.includes("fetch failed") ||
+      msg.includes("failed to get document") ||
+      msg.includes("network")
+    );
+  }
+  return false;
+}
+
 async function testConnection() {
+  if (typeof navigator !== "undefined" && !navigator.onLine) return;
   try {
     await getDocFromServer(doc(db, "test", "connection"));
   } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message.includes("the client is offline")
-    ) {
-      console.error("Please check your Firebase configuration.");
+    if (isOfflineError(error)) {
+      console.warn("Firebase client in offline mode during connection check.");
+    } else {
+      console.warn("Firebase connection check warning:", error);
     }
   }
 }
@@ -52,8 +67,9 @@ export function handleFirestoreError(
   operationType: OperationType,
   path: string | null,
 ) {
+  const errMessage = error instanceof Error ? error.message : String(error);
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errMessage,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -69,6 +85,12 @@ export function handleFirestoreError(
     operationType,
     path,
   };
+
+  if (isOfflineError(error)) {
+    console.warn("Firestore (Offline warning):", errMessage);
+    return;
+  }
+
   console.error("Firestore Error: ", JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
@@ -92,7 +114,11 @@ export async function syncStateToFirestore(
     });
     return true;
   } catch (error) {
-    console.error("Sync failed:", error);
+    if (isOfflineError(error)) {
+      console.warn("Sync skipped: client is offline");
+      return false;
+    }
+    console.warn("Sync failed:", error);
     try {
       handleFirestoreError(error, OperationType.WRITE, path);
     } catch {
@@ -116,7 +142,11 @@ export async function fetchStateFromFirestore(userId: string): Promise<any | nul
     }
     return null;
   } catch (error) {
-    console.error("Fetch failed:", error);
+    if (isOfflineError(error)) {
+      console.warn("Fetch skipped: client is offline");
+      return null;
+    }
+    console.warn("Fetch failed:", error);
     try {
       handleFirestoreError(error, OperationType.GET, path);
     } catch {
