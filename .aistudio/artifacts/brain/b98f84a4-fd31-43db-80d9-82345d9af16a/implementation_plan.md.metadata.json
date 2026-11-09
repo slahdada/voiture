@@ -1,0 +1,6 @@
+{
+  "summary":  "Plan d'implémentation pour le mode compte local autonome et immédiat, permettant l'inscription et la connexion sans blocage ni dépendance externe de clé API Firebase, avec persistance et isolation par utilisateur.",
+  "updatedAt":  "2026-11-09T08:35:14.995891631Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

@@ -449,3 +449,63 @@ describe("Types d’entrées et validation des archives", () => {
     expect(() => validateState(s)).toThrow("Champ texte invalide");
   });
 });
+
+describe("Sélecteur de période et calculs temporels (Africa/Tunis)", () => {
+  it("calcule correctement les bornes du jour, mois, année et semaine du lundi au dimanche", async () => {
+    const { computePeriod, isDateInPeriod, shiftPeriod } = await import("../src/period");
+
+    // Jour
+    const day = computePeriod("day", "2026-11-08");
+    expect(day.start).toBe("2026-11-08");
+    expect(day.end).toBe("2026-11-08");
+    expect(isDateInPeriod("2026-11-08", day.start, day.end)).toBe(true);
+    expect(isDateInPeriod("2026-11-09", day.start, day.end)).toBe(false);
+
+    // Semaine (2026-11-08 est un dimanche -> début lundi 2026-11-02, fin dimanche 2026-11-08)
+    const week = computePeriod("week", "2026-11-08");
+    expect(week.start).toBe("2026-11-02");
+    expect(week.end).toBe("2026-11-08");
+    expect(isDateInPeriod("2026-11-08", week.start, week.end)).toBe(true); // dernier jour inclus !
+    expect(isDateInPeriod("2026-11-02", week.start, week.end)).toBe(true);
+    expect(isDateInPeriod("2026-11-01", week.start, week.end)).toBe(false);
+
+    // Semaine chevauchant un changement d'année (2026-12-31 est un jeudi -> lundi 2026-12-28 au dimanche 2027-01-03)
+    const newYearWeek = computePeriod("week", "2026-12-31");
+    expect(newYearWeek.start).toBe("2026-12-28");
+    expect(newYearWeek.end).toBe("2027-01-03");
+    expect(isDateInPeriod("2026-12-31", newYearWeek.start, newYearWeek.end)).toBe(true);
+    expect(isDateInPeriod("2027-01-03", newYearWeek.start, newYearWeek.end)).toBe(true);
+    expect(isDateInPeriod("2027-01-04", newYearWeek.start, newYearWeek.end)).toBe(false);
+
+    // Mois
+    const month = computePeriod("month", "2026-02-15");
+    expect(month.start).toBe("2026-02-01");
+    expect(month.end).toBe("2026-02-28");
+
+    // Année bissextile (2028)
+    const leapMonth = computePeriod("month", "2028-02-10");
+    expect(leapMonth.end).toBe("2028-02-29");
+
+    // Déplacement de période (shiftPeriod)
+    const nextMonth = shiftPeriod(month, 1);
+    expect(nextMonth.start).toBe("2026-03-01");
+    expect(nextMonth.end).toBe("2026-03-31");
+
+    const prevMonth = shiftPeriod(month, -1);
+    expect(prevMonth.start).toBe("2026-01-01");
+    expect(prevMonth.end).toBe("2026-01-31");
+  });
+
+  it("gère les périodes personnalisées et empêche les inversions dateFin < dateDebut", async () => {
+    const { computePeriod, isDateInPeriod } = await import("../src/period");
+    const custom = computePeriod("custom", "2026-05-10", "2026-05-01"); // fin avant début
+    expect(custom.start).toBe("2026-05-10");
+    expect(custom.end).toBe("2026-05-10"); // ajusté à start
+
+    const validCustom = computePeriod("custom", "2026-05-01", "2026-05-15");
+    expect(isDateInPeriod("2026-05-15", validCustom.start, validCustom.end)).toBe(true);
+    expect(isDateInPeriod("2026-05-16", validCustom.start, validCustom.end)).toBe(false);
+  });
+});
+
+

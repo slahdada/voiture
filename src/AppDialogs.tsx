@@ -11,6 +11,8 @@ import {
   Maximize,
   Share2,
   Mail,
+  FileCode,
+  FileSpreadsheet,
 } from "lucide-react";
 import type { User as FirebaseUser } from "firebase/auth";
 import { AuthModal } from "./AuthModal";
@@ -19,7 +21,7 @@ import { Modal, Field, AttachmentImage, AttachmentView } from "./ui";
 import { VehicleForm, EntryForm, DeadlineForm } from "./forms";
 import { EntryIcon, derivedDeadlines, fmtDate, money } from "./Dashboard";
 import { analyzeFuelEntries, fmtUnitPrice, fmtLitres } from "./calculations";
-import { backup, report } from "./io";
+import { backup, report, exportStateJson, exportStateCsv } from "./io";
 import { scheduleNotifications } from "./native";
 import {
   labels,
@@ -51,6 +53,7 @@ interface Props {
   install?: InstallEvent;
   setInstall: (s: InstallEvent | undefined) => void;
   currentUser?: FirebaseUser | null;
+  onAuthSuccess?: (u: any) => void;
 }
 export function AppDialogs({
   state,
@@ -71,6 +74,7 @@ export function AppDialogs({
   install,
   setInstall,
   currentUser,
+  onAuthSuccess,
 }: Props) {
   return (
     <>
@@ -459,17 +463,46 @@ export function AppDialogs({
             )}
           </section>
           <section className="settings-section">
-            <h3>Vos données</h3>
+            <h3>Sauvegarde locale & Export</h3>
             <p>
-              Stockage local sur cet appareil, sans synchronisation entre
-              appareils.
+              Téléchargez une copie locale de secours de toutes vos données directement sur votre appareil (utilisable hors ligne ou pour vos archives).
             </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 my-2">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() =>
+                  void act(async () => {
+                    exportStateJson(state);
+                    setNotice("Sauvegarde complète JSON téléchargée avec succès.");
+                  })
+                }
+                title="Exporter toutes les données au format JSON"
+              >
+                <FileCode size={17} className="text-emerald-500" />
+                Exporter en JSON (.json)
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() =>
+                  void act(async () => {
+                    exportStateCsv(state);
+                    setNotice("Export tableur CSV téléchargé avec succès.");
+                  })
+                }
+                title="Exporter les entrées au format CSV pour Excel ou Calc"
+              >
+                <FileSpreadsheet size={17} className="text-blue-500" />
+                Exporter en CSV (.csv)
+              </button>
+            </div>
             <button
               className="secondary full"
               onClick={() => setModal({ type: "transfer" })}
             >
               <Download size={17} />
-              Sauvegarder, restaurer ou importer
+              Archive complète ZIP (avec pièces jointes & photos)
             </button>
             <button
               className="secondary full"
@@ -586,6 +619,8 @@ export function AppDialogs({
           onClose={() => setModal(null)}
           state={state}
           currentUser={currentUser ?? null}
+          initialMode={modal.mode}
+          onAuthSuccess={onAuthSuccess}
           onRestoreState={(restored) => {
             void commit(restored, "Données restaurées depuis le Cloud.");
           }}

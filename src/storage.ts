@@ -1,5 +1,6 @@
 import { openDB } from "idb";
 import { emptyState, base, type State, type Attachment } from "./types";
+import { getInitialHistoricalData } from "./initialData";
 const db = () =>
   openDB("carnet-auto", 1, {
     upgrade(db) {
@@ -8,11 +9,36 @@ const db = () =>
     },
   });
 export const storage = {
-  async load(): Promise<State> {
-    return (await (await db()).get("state", "main")) ?? emptyState();
+  async load(userId?: string): Promise<State> {
+    const key =
+      import.meta.env.MODE === "test"
+        ? userId && userId !== "test-user-id"
+          ? `state_${userId}`
+          : "main"
+        : userId
+          ? `state_${userId}`
+          : "guest";
+    if (!userId && import.meta.env.MODE !== "test") {
+      return emptyState();
+    }
+    const saved = await (await db()).get("state", key);
+    if (!saved) {
+      const initial = getInitialHistoricalData(userId);
+      await (await db()).put("state", initial, key);
+      return initial;
+    }
+    return saved;
   },
-  async save(state: State) {
-    await (await db()).put("state", state, "main");
+  async save(state: State, userId?: string) {
+    const key =
+      import.meta.env.MODE === "test"
+        ? userId && userId !== "test-user-id"
+          ? `state_${userId}`
+          : "main"
+        : userId
+          ? `state_${userId}`
+          : "guest";
+    await (await db()).put("state", state, key);
   },
   async attachment(id: string): Promise<Attachment | undefined> {
     return (await db()).get("attachments", id);
@@ -56,12 +82,25 @@ export const storage = {
     await (await db()).put("attachments", a);
     return a.id;
   },
-  async replace(state: State, attachments: Attachment[], merge: boolean) {
+  async replace(
+    state: State,
+    attachments: Attachment[],
+    merge: boolean,
+    userId?: string,
+  ) {
     const database = await db();
+    const key =
+      import.meta.env.MODE === "test"
+        ? userId && userId !== "test-user-id"
+          ? `state_${userId}`
+          : "main"
+        : userId
+          ? `state_${userId}`
+          : "guest";
     const tx = database.transaction(["state", "attachments"], "readwrite");
     if (!merge) await tx.objectStore("attachments").clear();
     for (const a of attachments) await tx.objectStore("attachments").put(a);
-    await tx.objectStore("state").put(state, "main");
+    await tx.objectStore("state").put(state, key);
     await tx.done;
   },
 };

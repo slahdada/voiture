@@ -73,12 +73,20 @@ export function handleFirestoreError(
   throw new Error(JSON.stringify(errInfo));
 }
 
-export async function syncStateToFirestore(state: any, email: string): Promise<boolean> {
-  const path = `users/${email}`;
+export async function syncStateToFirestore(
+  state: any,
+  userId: string,
+  email?: string,
+  displayName?: string,
+): Promise<boolean> {
+  if (!userId) return false;
+  const path = `users/${userId}`;
   try {
-    const docRef = doc(db, "users", email);
+    const docRef = doc(db, "users", userId);
     await setDoc(docRef, {
-      email,
+      userId,
+      email: email || auth.currentUser?.email || "",
+      displayName: displayName || auth.currentUser?.displayName || "",
       stateJson: JSON.stringify(state),
       updatedAt: new Date().toISOString(),
     });
@@ -94,10 +102,11 @@ export async function syncStateToFirestore(state: any, email: string): Promise<b
   }
 }
 
-export async function fetchStateFromFirestore(email: string): Promise<any | null> {
-  const path = `users/${email}`;
+export async function fetchStateFromFirestore(userId: string): Promise<any | null> {
+  if (!userId) return null;
+  const path = `users/${userId}`;
   try {
-    const docRef = doc(db, "users", email);
+    const docRef = doc(db, "users", userId);
     const snap = await getDoc(docRef);
     if (snap.exists()) {
       const data = snap.data();

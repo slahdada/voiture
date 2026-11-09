@@ -2125,10 +2125,26 @@ small,
   width: 100%;
   font-weight: 500;
 }
-.email-login-nav-btn:hover {
-  background: #f7f9f6;
-  border-color: var(--green);
-  color: var(--green);
+.sidebar-logout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid #d9e3d4;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #637568;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.sidebar-logout-btn:hover {
+  background: #fbeae8;
+  border-color: #f5c2bd;
+  color: #b91c1c;
 }
 
 /* Header Auth Button */
@@ -2154,5 +2170,219 @@ small,
 /* Bottom nav connection button */
 .bottom-nav button.connected-nav {
   color: var(--green);
+}
+
+/* Clickable Stat Cards */
+.stat.clickable {
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  position: relative;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 19px;
+  min-width: 0;
+}
+.stat.clickable:hover {
+  transform: translateY(-2px);
+  border-color: #b7c7b8;
+  box-shadow: 0 6px 18px rgba(25, 76, 63, 0.08);
+}
+.stat.clickable:active {
+  transform: translateY(0);
+}
+.stat.clickable:focus-visible {
+  outline: 3px solid #8ebdb0;
+  outline-offset: 3px;
+}
+.stat-chevron {
+  color: #92998e;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+.stat.clickable:hover .stat-chevron {
+  color: var(--green);
+  transform: translateX(2px);
+}
+
+/* Detail Pages Navigation & Layout */
+.detail-page-container {
+  display: flex;
+  flex-direction: column;
+}
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--green);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  min-height: 32px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+.back-button:hover {
+  color: #10332a;
+  transform: translateX(-2px);
+}
+.back-button:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+/* Period Selector Styles */
+.period-selector-panel {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin-bottom: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+.period-tabs {
+  display: flex;
+  background: #f1f3ec;
+  padding: 4px;
+  border-radius: 10px;
+  gap: 4px;
+  overflow-x: auto;
+}
+.period-tab-btn {
+  flex: 1;
+  min-width: 75px;
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #65775c;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.period-tab-btn:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--green);
+}
+.period-tab-btn.active {
+  background: white;
+  color: var(--green);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.07);
+}
+.period-tab-btn:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 1px;
+}
+.period-nav-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.period-nav-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.period-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  background: #f4f6ef;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: #365448;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.period-nav-btn:hover {
+  background: white;
+  border-color: #b7c7b8;
+  color: var(--green);
+}
+.period-now-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #edf3e8;
+  border: 1px solid #d5e4cf;
+  border-radius: 8px;
+  color: var(--green);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.period-now-btn:hover {
+  background: #e1ecd9;
+}
+.period-label-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #f9faf7;
+  border: 1px solid #e7ede2;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--green);
+}
+.period-label-badge strong {
+  font-weight: 700;
+}
+.period-dates-subtext {
+  font-size: 11px;
+  color: #7a8675;
+  font-weight: 400;
+}
+.period-pickers-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 6px;
+  border-top: 1px dashed #e8ece2;
+}
+.period-inline-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #65775c;
+  font-weight: 500;
+}
+.period-inline-picker input {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 12px;
+  background: white;
+  border: 1px solid #dee5d8;
+  border-radius: 6px;
+}
+.period-custom-inputs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
 }
 

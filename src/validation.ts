@@ -30,6 +30,7 @@ export function validateEntry(e: Entry) {
     "attachmentId",
     "expiry",
     "nextDate",
+    "userId",
   ]);
   if (e.full !== undefined && typeof e.full !== "boolean")
     throw Error("Indicateur de plein invalide.");
@@ -89,6 +90,7 @@ export function validateState(input: unknown): asserts input is State {
       "purchaseDate",
       "notes",
       "photoId",
+      "userId",
     ]);
     timestamps(v);
     if (
@@ -122,7 +124,7 @@ export function validateState(input: unknown): asserts input is State {
   }
   for (const d of s.deadlines) {
     if (!d || typeof d !== "object") throw Error("Échéance invalide.");
-    optionalStrings(d, ["notes", "date"]);
+    optionalStrings(d, ["notes", "date", "userId"]);
     timestamps(d);
     if (
       typeof d.id !== "string" ||

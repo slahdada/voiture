@@ -1,5 +1,13 @@
 import type { Vehicle, Entry, Deadline, Kind } from "./types";
-export type Page = "home" | "journal" | "deadlines" | "documents";
+export type Page =
+  | "home"
+  | "journal"
+  | "deadlines"
+  | "documents"
+  | "mileage"
+  | "expenses"
+  | "fuel"
+  | "trips";
 export type ModalState =
   | { type: "vehicle"; vehicle?: Vehicle }
   | { type: "entry"; entry?: Entry; kind: Kind }
@@ -8,7 +16,7 @@ export type ModalState =
   | { type: "settings" }
   | { type: "vehicles" }
   | { type: "transfer" }
-  | { type: "auth" }
+  | { type: "auth"; mode?: "login" | "register" }
   | null;
 export interface InstallEvent extends Event {
   prompt(): Promise<void>;

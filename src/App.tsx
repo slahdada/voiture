@@ -1,6 +1,10 @@
 import { AppDialogs } from "./AppDialogs";
 import { JournalScreen } from "./JournalScreen";
 import { DeadlinesScreen } from "./DeadlinesScreen";
+import { MileageScreen } from "./MileageScreen";
+import { ExpensesScreen } from "./ExpensesScreen";
+import { FuelScreen } from "./FuelScreen";
+import { TripsScreen } from "./TripsScreen";
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import {
   Car,
@@ -54,17 +58,55 @@ import {
 } from "./Dashboard";
 import { exportCsv, report, backup } from "./io";
 import { scheduleNotifications } from "./native";
-import { auth, syncStateToFirestore, fetchStateFromFirestore, db, handleFirestoreError, OperationType } from "./firebase";
+import {
+  auth,
+  syncStateToFirestore,
+  fetchStateFromFirestore,
+  db,
+  handleFirestoreError,
+  OperationType,
+} from "./firebase";
 import { onSnapshot, doc } from "firebase/firestore";
-import { onAuthStateChanged, type User as FirebaseUser } from "firebase/auth";
-import { Mail } from "lucide-react";
+import {
+  onAuthStateChanged,
+  signOut,
+  type User as FirebaseUser,
+} from "firebase/auth";
+import { Mail, LogOut, User } from "lucide-react";
+import { LandingScreen } from "./LandingScreen";
+import { AuthModal } from "./AuthModal";
+import { getStoredSession, logoutLocalAccount } from "./localAuth";
 const Transfers = lazy(() =>
   import("./Transfers").then((m) => ({ default: m.Transfers })),
 );
 import type { Page, ModalState, InstallEvent } from "./appTypes";
-export default function App() {
+
+interface AppProps {
+  initialUser?: FirebaseUser | null;
+}
+
+export default function App({ initialUser }: AppProps = {}) {
+  const isTestEnv = import.meta.env.MODE === "test";
+  const defaultTestUser: FirebaseUser = {
+    uid: "test-user-id",
+    email: "slahdada@gmail.com",
+    displayName: "Slah Dada",
+  } as FirebaseUser;
+
+  const defaultOwnerUser: FirebaseUser = {
+    uid: "user_slahdada_gmail_com",
+    email: "slahdada@gmail.com",
+    displayName: "Slah Dada",
+  } as FirebaseUser;
+
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(
+    initialUser !== undefined
+      ? initialUser
+      : isTestEnv
+        ? defaultTestUser
+        : (auth.currentUser ?? (getStoredSession() as any) ?? defaultOwnerUser),
+  );
   const [state, setState] = useState<State>(emptyState);
-  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [syncStatus, setSyncStatus] = useState<"synced" | "pending" | "offline">(
     !navigator.onLine ? "offline" : localStorage.getItem("sync_pending") === "true" ? "pending" : "synced"
   );
@@ -87,17 +129,21 @@ export default function App() {
   const ref = useRef(state);
   ref.current = state;
 
-  const isTestEnv = import.meta.env.MODE === "test";
-
-  const tryBackgroundSync = async (currentState: State, userEmail?: string) => {
+  const tryBackgroundSync = async (currentState: State, targetUid?: string) => {
     if (isTestEnv) return;
-    const email = userEmail || auth.currentUser?.email || "slahdada@gmail.com";
+    const uid = targetUid || currentUser?.uid;
+    if (!uid) return;
     if (!navigator.onLine) {
       setSyncStatus("offline");
       return;
     }
     setSyncStatus("pending");
-    const success = await syncStateToFirestore(currentState, email);
+    const success = await syncStateToFirestore(
+      currentState,
+      uid,
+      currentUser?.email || "",
+      currentUser?.displayName || "",
+    );
     if (success) {
       setSyncStatus("synced");
       localStorage.removeItem("sync_pending");
@@ -117,22 +163,41 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (!currentUser) {
+      setState(emptyState());
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const uid = currentUser.uid;
+
     storage
-      .load()
+      .load(uid)
       .then(async (s) => {
         validateState(s);
         let finalState = s;
 
-        const email = auth.currentUser?.email || "slahdada@gmail.com";
         if (navigator.onLine && !isTestEnv) {
           try {
-            const cloudState = await fetchStateFromFirestore(email);
-            if (cloudState && Array.isArray(cloudState.vehicles) && cloudState.vehicles.length > 0) {
+            const cloudState = await fetchStateFromFirestore(uid);
+            if (
+              cloudState &&
+              Array.isArray(cloudState.vehicles) &&
+              cloudState.vehicles.length > 0
+            ) {
               const localEmpty = s.vehicles.length === 0;
               if (localEmpty) {
                 finalState = cloudState;
-                await storage.save(cloudState);
+                await storage.save(cloudState, uid);
               }
+            } else if (s.vehicles.length > 0) {
+              await syncStateToFirestore(
+                s,
+                uid,
+                currentUser.email || "",
+                currentUser.displayName || "",
+              );
             }
           } catch (e) {
             console.warn("Startup cloud fetch failed:", e);
@@ -143,7 +208,7 @@ export default function App() {
         setLoadFailed(false);
 
         if (!isTestEnv && localStorage.getItem("sync_pending") === "true") {
-          void tryBackgroundSync(finalState);
+          void tryBackgroundSync(finalState, uid);
         }
       })
       .catch((e) => {
@@ -151,7 +216,9 @@ export default function App() {
         showError(e);
       })
       .finally(() => setLoading(false));
+  }, [currentUser]);
 
+  useEffect(() => {
     const network = () => {
       const isOnline = navigator.onLine;
       setOnline(isOnline);
@@ -183,40 +250,19 @@ export default function App() {
     if (isTestEnv) return;
     const unsub = onAuthStateChanged(auth, (u) => {
       setCurrentUser(u);
+      if (!u) {
+        setState(emptyState());
+        setLoading(false);
+      }
     });
     return () => unsub();
   }, []);
 
   useEffect(() => {
-    if (isTestEnv) return;
-    if (currentUser && navigator.onLine) {
-      const email = currentUser.email || "slahdada@gmail.com";
-      const syncOnLogin = async () => {
-        try {
-          const cloudState = await fetchStateFromFirestore(email);
-          if (cloudState && Array.isArray(cloudState.vehicles) && cloudState.vehicles.length > 0) {
-            const localEmpty = state.vehicles.length === 0;
-            if (localEmpty) {
-              setState(cloudState);
-              await storage.save(cloudState);
-              setNotice("Carnet synchronisé depuis le Cloud.");
-            }
-          } else if (state.vehicles.length > 0) {
-            await syncStateToFirestore(state, email);
-          }
-        } catch (e) {
-          console.warn("Auth sync on login failed:", e);
-        }
-      };
-      void syncOnLogin();
-    }
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (isTestEnv) return;
-    const email = currentUser?.email || "slahdada@gmail.com";
-    const path = `users/${email}`;
-    const docRef = doc(db, "users", email);
+    if (isTestEnv || !currentUser) return;
+    const uid = currentUser.uid;
+    const path = `users/${uid}`;
+    const docRef = doc(db, "users", uid);
 
     const unsubscribe = onSnapshot(
       docRef,
@@ -230,9 +276,12 @@ export default function App() {
             const localStr = JSON.stringify(ref.current);
 
             // Mise à jour immédiate si les données cloud diffèrent et pas d'envois en attente
-            if (cloudStr !== localStr && localStorage.getItem("sync_pending") !== "true") {
+            if (
+              cloudStr !== localStr &&
+              localStorage.getItem("sync_pending") !== "true"
+            ) {
               validateState(cloudState);
-              void storage.save(cloudState).then(() => {
+              void storage.save(cloudState, uid).then(() => {
                 setState(cloudState);
                 setSyncStatus("synced");
               });
@@ -248,7 +297,7 @@ export default function App() {
         } catch (e) {
           console.warn("Real-time listener warning:", e);
         }
-      }
+      },
     );
 
     return () => unsubscribe();
@@ -344,27 +393,16 @@ export default function App() {
       throw Error(
         "Le stockage n’a pas pu être lu. Rechargez l’application avant de modifier vos données.",
       );
+    if (currentUser) {
+      next.userId = currentUser.uid;
+    }
     validateState(next);
-    await storage.save(next);
+    await storage.save(next, currentUser?.uid);
     setState(next);
     setNotice(message);
 
-    if (isTestEnv) return;
-    const email = auth.currentUser?.email || "slahdada@gmail.com";
-    if (navigator.onLine) {
-      setSyncStatus("pending");
-      const success = await syncStateToFirestore(next, email);
-      if (success) {
-        setSyncStatus("synced");
-        localStorage.removeItem("sync_pending");
-      } else {
-        setSyncStatus("pending");
-        localStorage.setItem("sync_pending", "true");
-      }
-    } else {
-      setSyncStatus("offline");
-      localStorage.setItem("sync_pending", "true");
-    }
+    if (isTestEnv || !currentUser) return;
+    void tryBackgroundSync(next, currentUser.uid);
   }
   const vehicle =
     state.vehicles.find((v) => v.id === state.settings.selectedVehicle) ??
@@ -391,6 +429,9 @@ export default function App() {
     setModal({ type: "entry", kind });
   };
   async function saveVehicle(v: Vehicle) {
+    if (currentUser) {
+      v.userId = currentUser.uid;
+    }
     const old = state.vehicles.find((x) => x.id === v.id);
     const preserved =
       old &&
@@ -406,11 +447,13 @@ export default function App() {
               date: old.readingDate,
               title: "Ancien relevé initial conservé",
               km: old.initialKm,
+              userId: currentUser?.uid,
             },
           ]
         : [];
-    const next = {
+    const next: State = {
       ...state,
+      userId: currentUser?.uid,
       vehicles: [...state.vehicles.filter((x) => x.id !== v.id), v],
       entries: [...state.entries, ...preserved],
       settings: { ...state.settings, selectedVehicle: v.id },
@@ -419,16 +462,27 @@ export default function App() {
     setModal(null);
   }
   async function saveEntry(e: Entry) {
+    if (currentUser) {
+      e.userId = currentUser.uid;
+    }
     await commit(
-      { ...state, entries: [...state.entries.filter((x) => x.id !== e.id), e] },
+      {
+        ...state,
+        userId: currentUser?.uid,
+        entries: [...state.entries.filter((x) => x.id !== e.id), e],
+      },
       "Entrée enregistrée.",
     );
     setModal(null);
   }
   async function saveDeadline(d: Deadline) {
+    if (currentUser) {
+      d.userId = currentUser.uid;
+    }
     await commit(
       {
         ...state,
+        userId: currentUser?.uid,
         deadlines: [...state.deadlines.filter((x) => x.id !== d.id), d],
       },
       "Échéance enregistrée.",
@@ -523,6 +577,21 @@ export default function App() {
     { id: "journal" as Page, label: "Carnet", icon: BookOpen },
     { id: "deadlines" as Page, label: "Échéances", icon: CalendarDays },
   ];
+
+  const handleSignOut = async () => {
+    logoutLocalAccount();
+    try {
+      await signOut(auth);
+    } catch {
+      /* ignore */
+    }
+    setCurrentUser(null);
+    setState(emptyState());
+    setPage("home");
+    setModal(null);
+    setNotice("Vous avez été déconnecté avec succès.");
+  };
+
   if (loading)
     return (
       <div className="loading">
@@ -530,6 +599,57 @@ export default function App() {
         <h2>Ouverture de votre carnet…</h2>
       </div>
     );
+
+  if (!currentUser) {
+    return (
+      <>
+        <LandingScreen
+          onOpenLogin={() => setModal({ type: "auth", mode: "login" })}
+          onOpenRegister={() => setModal({ type: "auth", mode: "register" })}
+        />
+        {modal?.type === "auth" && (
+          <AuthModal
+            onClose={() => setModal(null)}
+            state={state}
+            currentUser={null}
+            initialMode={modal.mode}
+            onAuthSuccess={(user) => {
+              setCurrentUser(user as any);
+              setModal(null);
+            }}
+            onRestoreState={(restored) => {
+              void commit(restored, "Données restaurées.");
+            }}
+            onNotice={(msg) => setNotice(msg)}
+          />
+        )}
+        {notice && (
+          <div className="toast" role="status">
+            <Check size={18} />
+            <span>{notice}</span>
+            <button
+              aria-label="Fermer le message"
+              onClick={() => setNotice("")}
+            >
+              <X size={17} />
+            </button>
+          </div>
+        )}
+        {error && (
+          <div className="toast error" role="alert">
+            <span>{error}</span>
+            <button
+              aria-label="Fermer le message"
+              onClick={() => setError("")}
+            >
+              <X size={18} />
+            </button>
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="app">
       <aside className="sidebar">
@@ -591,31 +711,36 @@ export default function App() {
           </button>
         </nav>
         <div className="sidebar-auth-box">
-          {currentUser ? (
-            <button
-              className="user-badge-btn"
-              onClick={() => setModal({ type: "auth" })}
-              title="Gérer mon compte"
-            >
-              <span className="user-avatar-dot">
-                {currentUser.email ? currentUser.email[0].toUpperCase() : "U"}
+          <button
+            className="user-badge-btn"
+            onClick={() => setModal({ type: "auth" })}
+            title="Mon compte"
+            aria-label="Mon compte"
+          >
+            <span className="user-avatar-dot">
+              {currentUser.displayName
+                ? currentUser.displayName[0].toUpperCase()
+                : currentUser.email
+                  ? currentUser.email[0].toUpperCase()
+                  : "U"}
+            </span>
+            <div className="user-badge-meta">
+              <span className="user-email-label truncate">
+                {currentUser.displayName || currentUser.email}
               </span>
-              <div className="user-badge-meta">
-                <span className="user-email-label truncate">
-                  {currentUser.email}
-                </span>
-                <span className="user-status-text">Connecté avec e-mail</span>
-              </div>
-            </button>
-          ) : (
-            <button
-              className="email-login-nav-btn"
-              onClick={() => setModal({ type: "auth" })}
-            >
-              <Mail size={18} />
-              <span>Se connecter avec e-mail</span>
-            </button>
-          )}
+              <span className="user-status-text">Mon compte sécurisé</span>
+            </div>
+          </button>
+          <button
+            type="button"
+            className="sidebar-logout-btn"
+            onClick={() => void handleSignOut()}
+            title="Se déconnecter"
+            aria-label="Se déconnecter"
+          >
+            <LogOut size={15} />
+            <span>Déconnexion</span>
+          </button>
         </div>
         <div className="sidebar-tip">
           <ShieldCheck size={25} />
@@ -651,19 +776,36 @@ export default function App() {
                   ? "Carnet"
                   : page === "deadlines"
                     ? "Échéances"
-                    : "Documents"}
+                    : page === "documents"
+                      ? "Documents"
+                      : page === "mileage"
+                        ? "Historique du kilométrage"
+                        : page === "expenses"
+                          ? "Dépenses"
+                          : page === "fuel"
+                            ? "Consommation et carburant"
+                            : "Trajets"}
             </strong>
           </div>
           <div className="header-actions">
             <button
-              className={`secondary auth-header-button ${currentUser ? "is-connected" : ""}`}
+              className="secondary auth-header-button is-connected"
               onClick={() => setModal({ type: "auth" })}
-              title={currentUser ? `Connecté avec ${currentUser.email}` : "Se connecter avec e-mail"}
+              title={`Mon compte : ${currentUser.displayName || currentUser.email}`}
+              aria-label="Mon compte"
             >
-              <Mail size={16} />
+              <User size={16} />
               <span className="auth-header-label">
-                {currentUser ? (currentUser.email?.split("@")[0] || "Compte") : "Se connecter avec e-mail"}
+                {currentUser.displayName || (currentUser.email ? currentUser.email.split("@")[0] : "Mon compte")}
               </span>
+            </button>
+            <button
+              className="icon-button"
+              onClick={() => void handleSignOut()}
+              title="Se déconnecter"
+              aria-label="Se déconnecter"
+            >
+              <LogOut size={18} />
             </button>
             <button
               className="vehicle-switch secondary"
@@ -729,7 +871,46 @@ export default function App() {
               openEntry={(entry) => setModal({ type: "detail", entry })}
               openCarnet={() => setPage("journal")}
               openDeadlines={() => setPage("deadlines")}
+              openMileage={() => setPage("mileage")}
+              openExpenses={() => setPage("expenses")}
+              openFuel={() => setPage("fuel")}
+              openTrips={() => setPage("trips")}
               act={act}
+            />
+          ) : page === "mileage" ? (
+            <MileageScreen
+              vehicle={vehicle}
+              entries={entries}
+              openEntry={(entry) => setModal({ type: "detail", entry })}
+              openVehicle={() => setModal({ type: "vehicle", vehicle })}
+              onBack={() => setPage("home")}
+              add={add}
+            />
+          ) : page === "expenses" ? (
+            <ExpensesScreen
+              vehicle={vehicle}
+              entries={entries}
+              currency={state.settings.currency}
+              openEntry={(entry) => setModal({ type: "detail", entry })}
+              onBack={() => setPage("home")}
+              add={add}
+            />
+          ) : page === "fuel" ? (
+            <FuelScreen
+              vehicle={vehicle}
+              entries={entries}
+              currency={state.settings.currency}
+              openEntry={(entry) => setModal({ type: "detail", entry })}
+              onBack={() => setPage("home")}
+              add={add}
+            />
+          ) : page === "trips" ? (
+            <TripsScreen
+              vehicle={vehicle}
+              entries={entries}
+              openEntry={(entry) => setModal({ type: "detail", entry })}
+              onBack={() => setPage("home")}
+              add={add}
             />
           ) : page === "journal" || page === "documents" ? (
             <JournalScreen
@@ -813,6 +994,7 @@ export default function App() {
           install,
           setInstall,
           currentUser,
+          onAuthSuccess: (u) => setCurrentUser(u as any),
         }}
       />
       {error && (

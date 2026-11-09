@@ -100,6 +100,51 @@ export function mergeStates(current: State, incoming: State): State {
   validateState(s);
   return s;
 }
+export function exportStateJson(state: State) {
+  const json = JSON.stringify(state, null, 2);
+  const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+  const dateStr = new Date().toISOString().slice(0, 10);
+  download(blob, `carnet-auto-sauvegarde-${dateStr}.json`);
+}
+
+export function exportStateCsv(state: State) {
+  // Exporte l'ensemble des entrées avec identification du véhicule
+  const vehicleMap = new Map(state.vehicles.map((v) => [v.id, v.name]));
+  const rows = state.entries.map((e) => ({
+    id: e.id,
+    vehicule: vehicleMap.get(e.vehicleId) ?? e.vehicleId,
+    type: e.kind,
+    date: e.date,
+    libelle: e.title,
+    kilometrage: e.km ?? "",
+    depart: e.startKm ?? "",
+    arrivee: e.endKm ?? "",
+    quantite: e.quantity ?? "",
+    prix_unitaire: e.unitPrice ?? "",
+    montant: e.amount ?? "",
+    plein_complet: e.full ? "oui" : "non",
+    categorie: e.category ?? "",
+    garage: e.garage ?? "",
+    notes: e.notes ?? "",
+    origine: e.origin ?? "",
+    destination: e.destination ?? "",
+    conducteur: e.driver ?? "",
+    motif: e.purpose ?? "",
+    reference: e.reference ?? "",
+    expiration: e.expiry ?? "",
+    prochaine_date: e.nextDate ?? "",
+    prochain_km: e.nextKm ?? "",
+  }));
+  const dateStr = new Date().toISOString().slice(0, 10);
+  download(
+    new Blob(
+      ["\uFEFF" + Papa.unparse(rows, { escapeFormulae: true, delimiter: ";" })],
+      { type: "text/csv;charset=utf-8" },
+    ),
+    `carnet-auto-export-${dateStr}.csv`,
+  );
+}
+
 export function exportCsv(entries: Entry[]) {
   const rows = entries.map((e) => ({
     id: e.id,
@@ -133,6 +178,7 @@ export function exportCsv(entries: Entry[]) {
     "carnet-auto.csv",
   );
 }
+
 export interface CsvPreview {
   headers: string[];
   rows: Record<string, string>[];

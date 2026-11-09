@@ -3,6 +3,7 @@ import {
   Wallet,
   Fuel,
   ArrowRight,
+  ChevronRight,
   Plus,
   Route,
   Wrench,
@@ -96,6 +97,10 @@ export function Dashboard({
   openEntry,
   openCarnet,
   openDeadlines,
+  openMileage,
+  openExpenses,
+  openFuel,
+  openTrips,
   act,
 }: {
   state: State;
@@ -107,6 +112,10 @@ export function Dashboard({
   openEntry: (e: Entry) => void;
   openCarnet: () => void;
   openDeadlines: () => void;
+  openMileage?: () => void;
+  openExpenses?: () => void;
+  openFuel?: () => void;
+  openTrips?: () => void;
   act: (fn: () => Promise<void>) => Promise<void>;
 }) {
   const km = vehicle ? currentKm(vehicle, entries) : undefined;
@@ -239,7 +248,11 @@ export function Dashboard({
           <p className="eyebrow">UN NOUVEL ÉVÉNEMENT ?</p>
           <h3>Ajoutez-le en quelques secondes.</h3>
           <div className="quick-actions">
-            <button onClick={() => add("trip")}>
+            <button
+              type="button"
+              onClick={() => add("trip")}
+              aria-label="Un trajet"
+            >
               <span className="quick-icon mint">
                 <Route size={21} />
               </span>
@@ -249,20 +262,23 @@ export function Dashboard({
               <Plus size={17} />
             </button>
             <button
-              onClick={() =>
-                add(vehicle?.energy === "Électrique" ? "charge" : "fuel")
-              }
+              type="button"
+              onClick={() => add("fuel")}
+              aria-label="Un plein"
             >
               <span className="quick-icon yellow">
                 <Fuel size={21} />
               </span>
               <span>
-                {vehicle?.energy === "Électrique" ? "Une recharge" : "Un plein"}
-                <small>Suivre l’énergie</small>
+                Un plein<small>Suivre le carburant</small>
               </span>
               <Plus size={17} />
             </button>
-            <button onClick={() => add("expense")}>
+            <button
+              type="button"
+              onClick={() => add("expense")}
+              aria-label="Une dépense"
+            >
               <span className="quick-icon blue">
                 <Wallet size={21} />
               </span>
@@ -275,21 +291,40 @@ export function Dashboard({
         </section>
       </div>
       <div className="stats-grid">
-        <div className="stat">
+        <button
+          type="button"
+          className="stat clickable"
+          onClick={openMileage}
+          aria-label="Kilométrage connu : ouvrir l’historique"
+          title="Consulter l'historique détaillé du kilométrage"
+        >
           <span>
             Kilométrage connu
-            <Gauge size={19} />
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+              <Gauge size={18} />
+              <ChevronRight size={15} className="stat-chevron" />
+            </span>
           </span>
           <strong>
             {km !== undefined ? km.toLocaleString("fr-FR") : "—"}
             <small> km</small>
           </strong>
-          <p>Dernier relevé chronologique saisi</p>
-        </div>
-        <div className="stat">
+          <p>Dernier relevé chronologique · Cliquer pour l’historique</p>
+        </button>
+
+        <button
+          type="button"
+          className="stat clickable"
+          onClick={openExpenses}
+          aria-label="Dépenses du mois : ouvrir le détail"
+          title="Consulter les dépenses et la ventilation par catégorie"
+        >
           <span>
             Dépenses du mois
-            <Wallet size={19} />
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+              <Wallet size={18} />
+              <ChevronRight size={15} className="stat-chevron" />
+            </span>
           </span>
           <strong>
             {money(
@@ -302,13 +337,23 @@ export function Dashboard({
               month: "long",
               year: "numeric",
             })}{" "}
-            · sans double comptage
+            · Cliquer pour le détail des dépenses
           </p>
-        </div>
-        <div className="stat">
+        </button>
+
+        <button
+          type="button"
+          className="stat clickable"
+          onClick={openFuel}
+          aria-label="Consommation calculée : ouvrir le détail"
+          title="Consulter l'analyse de consommation et l'historique des pleins"
+        >
           <span>
             Consommation calculée
-            <Fuel size={19} />
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+              <Fuel size={18} />
+              <ChevronRight size={15} className="stat-chevron" />
+            </span>
           </span>
           <strong>
             {last ? fmtDecimal(last.value, 2) : fStats.lastConsumptionLabel}
@@ -316,21 +361,31 @@ export function Dashboard({
           </strong>
           <p>
             {last
-              ? `${fmtDate(last.from)} → ${fmtDate(last.date)}`
-              : "Données insuffisantes : deux pleins complets nécessaires"}
+              ? `${fmtDate(last.from)} → ${fmtDate(last.date)} · Cliquer pour le détail`
+              : "Cliquer pour voir l'historique et les cycles"}
           </p>
-        </div>
-        <div className="stat">
+        </button>
+
+        <button
+          type="button"
+          className="stat clickable"
+          onClick={openTrips}
+          aria-label="Distance des trajets : ouvrir le détail"
+          title="Consulter les trajets et distances parcourues"
+        >
           <span>
             Distance des trajets
-            <Route size={19} />
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+              <Route size={18} />
+              <ChevronRight size={15} className="stat-chevron" />
+            </span>
           </span>
           <strong>
             {tripDistance(entries).toLocaleString("fr-FR")}
             <small> km</small>
           </strong>
-          <p>Tous les trajets complets · chevauchements fusionnés</p>
-        </div>
+          <p>Trajets complets · Cliquer pour le détail</p>
+        </button>
       </div>
 
       <section className="panel" style={{ marginBottom: "23px" }}>

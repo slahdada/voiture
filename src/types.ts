@@ -21,6 +21,7 @@ export interface Base {
   id: string;
   createdAt: string;
   updatedAt: string;
+  userId?: string;
 }
 export interface Vehicle extends Base {
   name: string;
@@ -82,6 +83,7 @@ export interface Settings {
 }
 export interface State {
   version: 1;
+  userId?: string;
   vehicles: Vehicle[];
   entries: Entry[];
   deadlines: Deadline[];

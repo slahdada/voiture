@@ -2,12 +2,20 @@
   "entities": {
     "UserProfile": {
       "title": "UserProfile",
-      "description": "User real-time carnet state sync document",
+      "description": "User profile and private carnet state document",
       "type": "object",
       "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Unique Firebase Auth user ID"
+        },
         "email": {
           "type": "string",
           "description": "User email address"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User full name or display name"
         },
         "stateJson": {
           "type": "string",
@@ -18,13 +26,13 @@
           "description": "Last synchronization timestamp"
         }
       },
-      "required": ["email", "stateJson", "updatedAt"]
+      "required": ["userId", "email", "stateJson", "updatedAt"]
     }
   },
   "firestore": {
-    "/users/{email}": {
+    "/users/{userId}": {
       "schema": "UserProfile",
-      "description": "User carnet document"
+      "description": "User private carnet document strictly accessible only by the owning authenticated user"
     }
   }
 }
