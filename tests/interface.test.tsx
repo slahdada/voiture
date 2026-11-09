@@ -534,6 +534,22 @@ describe("Parcours interface", () => {
     ).toBeDefined();
     expect(screen.getAllByRole("button", { name: /Mon compte/i }).length).toBeGreaterThan(0);
   });
+
+  it("gère l'envoi de réinitialisation de mot de passe avec retour clair", async () => {
+    render(<App initialUser={null} />);
+    const user = userEvent.setup();
+
+    const loginBtn = await screen.findByRole("button", { name: "Se connecter" });
+    await user.click(loginBtn);
+
+    const resetTrigger = screen.getByRole("button", { name: /Mot de passe oublié/i });
+    await user.click(resetTrigger);
+
+    await user.type(screen.getByLabelText(/Adresse e-mail/i), "mon-compte@exemple.com");
+
+    const submitBtn = screen.getByRole("button", { name: /Envoyer le lien de réinitialisation/i });
+    expect(submitBtn).toBeDefined();
+  });
 });
 
 

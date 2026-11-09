@@ -105,6 +105,12 @@ export function AuthModal({
           return "Le mot de passe doit comporter au moins 6 caractères.";
         case "auth/invalid-email":
           return "Veuillez saisir une adresse e-mail valide.";
+        case "auth/unauthorized-domain":
+          return "Ce domaine n'est pas autorisé dans Firebase. Ajoutez le domaine Vercel dans la console Firebase (Authentication > Settings > Authorized domains).";
+        case "auth/too-many-requests":
+          return "Trop de demandes de réinitialisation. Veuillez patienter un instant avant de réessayer.";
+        case "auth/missing-email":
+          return "Veuillez indiquer une adresse e-mail.";
         case "auth/api-key-not-valid":
         case "auth/invalid-api-key":
           return "Clé API Firebase non valide ou restreinte. Veuillez vérifier la clé Web API dans la console Google Cloud / Firebase.";
@@ -191,13 +197,34 @@ export function AuthModal({
     setLoading(true);
     try {
       if (mode === "reset") {
+        const redirectUrl =
+          typeof window !== "undefined" && window.location.origin
+            ? window.location.origin
+            : "https://gen-lang-client-0434791601.firebaseapp.com";
+
+        const actionCodeSettings = {
+          url: redirectUrl,
+          handleCodeInApp: true,
+        };
+
         try {
-          await sendPasswordResetEmail(auth, emailClean);
-        } catch {
-          // Si Firebase hors ligne / sans clé, message informatif clair
+          await sendPasswordResetEmail(auth, emailClean, actionCodeSettings);
+          setSuccess("Un lien de réinitialisation a été envoyé à votre adresse e-mail. Vérifiez également vos spams.");
+        } catch (resetErr) {
+          console.error("Erreur technique d'envoi d'e-mail de réinitialisation :", resetErr);
+          const code =
+            typeof resetErr === "object" && resetErr !== null && "code" in resetErr
+              ? String((resetErr as { code: unknown }).code)
+              : "";
+          if (code === "auth/user-not-found") {
+            setSuccess(
+              "Si cette adresse e-mail existe, un lien de réinitialisation vous sera envoyé. Vérifiez également vos spams.",
+            );
+          } else {
+            setError(translateAuthError(resetErr));
+            return;
+          }
         }
-        setSuccess("Si un compte existe pour cet e-mail, les instructions de réinitialisation ont été préparées.");
-        setMode("login");
       } else if (mode === "register") {
         const nameToUse = fullName.trim() || emailClean.split("@")[0];
         // Enregistrement local autonome garanti sans erreur de clé API
