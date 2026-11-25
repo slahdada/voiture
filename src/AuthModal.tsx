@@ -34,6 +34,8 @@ import {
   registerLocalAccount,
   loginLocalAccount,
   logoutLocalAccount,
+  hasLocalAccount,
+  resetLocalAccountPassword,
   type LocalUser,
 } from "./localAuth";
 
@@ -61,6 +63,7 @@ export function AuthModal({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showLocalResetForm, setShowLocalResetForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
   const [restoring, setRestoring] = useState(false);
@@ -183,7 +186,7 @@ export function AuthModal({
       return;
     }
 
-    if (mode === "register") {
+    if (mode === "register" || (mode === "reset" && showLocalResetForm)) {
       if (password.length < 6) {
         setError("Le mot de passe doit comporter au moins 6 caractères.");
         return;
@@ -197,6 +200,19 @@ export function AuthModal({
     setLoading(true);
     try {
       if (mode === "reset") {
+        if (showLocalResetForm) {
+          resetLocalAccountPassword(emailClean, password);
+          setSuccess("Votre mot de passe a été réinitialisé avec succès. Vous pouvez maintenant vous connecter.");
+          setShowLocalResetForm(false);
+          setPassword("");
+          setConfirmPassword("");
+          setTimeout(() => {
+            setMode("login");
+            setSuccess("Mot de passe mis à jour. Connectez-vous avec votre nouveau mot de passe.");
+          }, 1200);
+          return;
+        }
+
         const redirectUrl =
           typeof window !== "undefined" && window.location.origin
             ? window.location.origin
@@ -211,15 +227,35 @@ export function AuthModal({
           await sendPasswordResetEmail(auth, emailClean, actionCodeSettings);
           setSuccess("Un lien de réinitialisation a été envoyé à votre adresse e-mail. Vérifiez également vos spams.");
         } catch (resetErr) {
-          console.error("Erreur technique d'envoi d'e-mail de réinitialisation :", resetErr);
+          console.warn("Avertissement technique d'envoi d'e-mail de réinitialisation :", resetErr);
           const code =
             typeof resetErr === "object" && resetErr !== null && "code" in resetErr
               ? String((resetErr as { code: unknown }).code)
               : "";
+          const rawMsg = resetErr instanceof Error ? resetErr.message : String(resetErr);
+          const isApiKeyOrOfflineIssue =
+            code.includes("api-key-not-valid") ||
+            code.includes("invalid-api-key") ||
+            code === "auth/network-request-failed" ||
+            code === "auth/operation-not-allowed" ||
+            rawMsg.toLowerCase().includes("api-key-not-valid") ||
+            rawMsg.toLowerCase().includes("api key not valid");
+
           if (code === "auth/user-not-found") {
             setSuccess(
               "Si cette adresse e-mail existe, un lien de réinitialisation vous sera envoyé. Vérifiez également vos spams.",
             );
+          } else if (isApiKeyOrOfflineIssue) {
+            if (hasLocalAccount(emailClean)) {
+              setShowLocalResetForm(true);
+              setSuccess(
+                "Compte local identifié. Définissez directement votre nouveau mot de passe ci-dessous.",
+              );
+            } else {
+              setSuccess(
+                "Si cette adresse e-mail existe, un lien de réinitialisation vous sera envoyé. Vérifiez également vos spams.",
+              );
+            }
           } else {
             setError(translateAuthError(resetErr));
             return;
@@ -579,8 +615,8 @@ export function AuthModal({
               />
             </Field>
 
-            {mode !== "reset" && (
-              <Field label="Mot de passe *">
+            {(mode !== "reset" || showLocalResetForm) && (
+              <Field label={mode === "reset" ? "Nouveau mot de passe *" : "Mot de passe *"}>
                 <input
                   type="password"
                   required
@@ -593,7 +629,7 @@ export function AuthModal({
               </Field>
             )}
 
-            {mode === "register" && (
+            {(mode === "register" || (mode === "reset" && showLocalResetForm)) && (
               <Field label="Confirmation du mot de passe *">
                 <input
                   type="password"
@@ -630,7 +666,10 @@ export function AuthModal({
               <Mail size={16} />
               {mode === "login" && "Se connecter"}
               {mode === "register" && "Créer mon compte"}
-              {mode === "reset" && "Envoyer le lien de réinitialisation"}
+              {mode === "reset" &&
+                (showLocalResetForm
+                  ? "Enregistrer le nouveau mot de passe"
+                  : "Envoyer le lien de réinitialisation")}
             </button>
           </form>
 
@@ -644,7 +683,9 @@ export function AuthModal({
                     className="text-emerald-700 font-bold hover:underline cursor-pointer"
                     onClick={() => {
                       setMode("register");
+                      setShowLocalResetForm(false);
                       setError(null);
+                      setSuccess(null);
                     }}
                   >
                     Créer un compte
@@ -656,7 +697,9 @@ export function AuthModal({
                     className="text-slate-500 hover:text-slate-700 hover:underline cursor-pointer"
                     onClick={() => {
                       setMode("reset");
+                      setShowLocalResetForm(false);
                       setError(null);
+                      setSuccess(null);
                     }}
                   >
                     Mot de passe oublié ?
@@ -671,7 +714,9 @@ export function AuthModal({
                   className="text-emerald-700 font-bold hover:underline cursor-pointer"
                   onClick={() => {
                     setMode("login");
+                    setShowLocalResetForm(false);
                     setError(null);
+                    setSuccess(null);
                   }}
                 >
                   Se connecter
@@ -684,7 +729,9 @@ export function AuthModal({
                   className="text-emerald-700 font-bold hover:underline cursor-pointer"
                   onClick={() => {
                     setMode("login");
+                    setShowLocalResetForm(false);
                     setError(null);
+                    setSuccess(null);
                   }}
                 >
                   Retour à la page de connexion

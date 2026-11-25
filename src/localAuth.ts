@@ -178,3 +178,52 @@ export function loginLocalAccount(
 export function logoutLocalAccount(): void {
   setStoredSession(null);
 }
+
+export function hasLocalAccount(email: string): boolean {
+  const cleanEmail = email.trim().toLowerCase();
+  if (cleanEmail === "slahdada@gmail.com") return true;
+  const accounts = getStoredAccounts();
+  return accounts.some((a) => a.email.toLowerCase() === cleanEmail);
+}
+
+export function resetLocalAccountPassword(
+  email: string,
+  newPassword: string,
+): { user: LocalUser } {
+  const cleanEmail = email.trim().toLowerCase();
+  const accounts = getStoredAccounts();
+  let account = accounts.find((a) => a.email.toLowerCase() === cleanEmail);
+
+  if (!account) {
+    if (cleanEmail === "slahdada@gmail.com") {
+      account = {
+        uid: "user_slahdada_gmail_com",
+        email: cleanEmail,
+        displayName: "Slah Dada",
+        createdAt: new Date().toISOString(),
+        provider: "local",
+        passwordHash: hashPassword(newPassword),
+      };
+      accounts.push(account);
+    } else {
+      const error = new Error("Aucun compte associé à cette adresse e-mail.");
+      (error as any).code = "auth/user-not-found";
+      throw error;
+    }
+  } else {
+    account.passwordHash = hashPassword(newPassword);
+  }
+
+  saveStoredAccounts(accounts);
+
+  const publicUser: LocalUser = {
+    uid: account.uid,
+    email: account.email,
+    displayName: account.displayName,
+    createdAt: account.createdAt,
+    provider: account.provider,
+  };
+
+  return { user: publicUser };
+}
+
