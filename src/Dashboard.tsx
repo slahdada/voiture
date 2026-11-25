@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import {
   Gauge,
   Wallet,
@@ -11,6 +12,7 @@ import {
   ShieldCheck,
   TrendingUp,
   FileText,
+  BarChart3,
 } from "lucide-react";
 import { generateMaintenanceReport } from "./io";
 import { AttachmentImage, Empty } from "./ui";
@@ -35,12 +37,14 @@ import {
   type Deadline,
   type Kind,
 } from "./types";
+
 export const fmtDate = (s: string) =>
   new Date(s + "T12:00:00").toLocaleDateString("fr-FR", {
     day: "numeric",
     month: "short",
     year: "numeric",
   });
+
 export const money = (n: number, currency: string) =>
   new Intl.NumberFormat("fr-FR", {
     style: "currency",
@@ -49,6 +53,7 @@ export const money = (n: number, currency: string) =>
       ? { minimumFractionDigits: 3, maximumFractionDigits: 3 }
       : {}),
   }).format(n);
+
 export function derivedDeadlines(
   entries: Entry[],
 ): (Deadline & { source: string })[] {
@@ -68,6 +73,7 @@ export function derivedDeadlines(
       source: e.id,
     }));
 }
+
 export function EntryIcon({ kind }: { kind: Kind }) {
   const Icon =
     kind === "trip"
@@ -87,6 +93,16 @@ export function EntryIcon({ kind }: { kind: Kind }) {
     </span>
   );
 }
+
+const CATEGORY_COLORS = [
+  "#194c3f",
+  "#7b9a6d",
+  "#b69c55",
+  "#5a7d7c",
+  "#8c7a6b",
+  "#476b5e",
+];
+
 export function Dashboard({
   state,
   vehicle,
@@ -118,45 +134,131 @@ export function Dashboard({
   openTrips?: () => void;
   act: (fn: () => Promise<void>) => Promise<void>;
 }) {
-  const km = vehicle ? currentKm(vehicle, entries) : undefined;
-  const month = today().slice(0, 7);
-  const monthEntries = entries.filter((e) => e.date.startsWith(month));
-  const cons = consumption(entries);
-  const last = cons.at(-1);
-  const fStats = fuelStats(entries, vehicle?.id);
+  const [chartHorizon, setChartHorizon] = useState<6 | 12>(6);
+  const [selectedMonthKey, setSelectedMonthKey] = useState<string | null>(null);
+  const [selectedConsIndex, setSelectedConsIndex] = useState<number | null>(null);
+
   const currency = state.settings.currency;
+  const km = useMemo(
+    () => (vehicle ? currentKm(vehicle, entries) : undefined),
+    [vehicle, entries],
+  );
+  const month = today().slice(0, 7);
+  const monthEntries = useMemo(
+    () => entries.filter((e) => e.date.startsWith(month)),
+    [entries, month],
+  );
+  const cons = useMemo(() => consumption(entries), [entries]);
+  const last = cons.at(-1);
+  const fStats = useMemo(
+    () => fuelStats(entries, vehicle?.id),
+    [entries, vehicle?.id],
+  );
   const currentYear = today().slice(0, 4);
-  const yearEntries = entries.filter((e) => e.date.startsWith(currentYear));
-  const cats = [
-    ...new Set(
-      yearEntries
-        .filter((e) => e.amount !== undefined)
-        .map((e) => e.category || labels[e.kind]),
-    ),
-  ]
-    .map((c) => ({
-      name: c,
-      value: total(
-        yearEntries.filter((e) => (e.category || labels[e.kind]) === c),
-        state.settings.currency,
+  const yearEntries = useMemo(
+    () => entries.filter((e) => e.date.startsWith(currentYear)),
+    [entries, currentYear],
+  );
+
+  const cats = useMemo(() => {
+    const names = [
+      ...new Set(
+        yearEntries
+          .filter((e) => e.amount !== undefined)
+          .map((e) => e.category || labels[e.kind]),
       ),
-    }))
-    .sort((a, b) => b.value - a.value);
-  const catTotal = cats.reduce((s, c) => s + c.value, 0);
-  const months = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date();
-    d.setDate(1);
-    d.setMonth(d.getMonth() - 5 + i);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    return {
-      label: d.toLocaleDateString("fr-FR", { month: "short" }),
-      value: total(
-        entries.filter((e) => e.date.startsWith(key)),
-        state.settings.currency,
-      ),
-    };
-  });
-  const maximum = Math.max(...months.map((m) => m.value), 1);
+    ];
+    return names
+      .map((c) => {
+        const matching = yearEntries.filter(
+          (e) => (e.category || labels[e.kind]) === c,
+        );
+        return {
+          name: c,
+          count: matching.length,
+          value: total(matching, currency),
+        };
+      })
+      .sort((a, b) => b.value - a.value);
+  }, [yearEntries, currency]);
+
+  const catTotal = useMemo(
+    () => cats.reduce((s, c) => s + c.value, 0),
+    [cats],
+  );
+
+  const months = useMemo(() => {
+    return Array.from({ length: chartHorizon }, (_, i) => {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() - (chartHorizon - 1) + i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const mEntries = entries.filter((e) => e.date.startsWith(key));
+      const fuelVal = total(
+        mEntries.filter((e) => e.kind === "fuel" || e.kind === "charge"),
+        currency,
+      );
+      const totalVal = total(mEntries, currency);
+      return {
+        key,
+        label: d.toLocaleDateString("fr-FR", { month: "short" }),
+        fullLabel: d.toLocaleDateString("fr-FR", {
+          month: "long",
+          year: "numeric",
+        }),
+        value: totalVal,
+        fuelValue: fuelVal,
+        otherValue: Math.max(0, totalVal - fuelVal),
+        count: mEntries.length,
+      };
+    });
+  }, [entries, currency, chartHorizon]);
+
+  const maximum = useMemo(
+    () => Math.max(...months.map((m) => m.value), 1),
+    [months],
+  );
+  const avgMonthSpend = useMemo(() => {
+    const active = months.filter((m) => m.value > 0);
+    if (!active.length) return 0;
+    return active.reduce((acc, m) => acc + m.value, 0) / active.length;
+  }, [months]);
+
+  const activeMonth = useMemo(
+    () =>
+      months.find((m) => m.key === selectedMonthKey) ??
+      months[months.length - 1],
+    [months, selectedMonthKey],
+  );
+
+  const recentActivities = useMemo(
+    () =>
+      [...entries]
+        .sort(
+          (a, b) =>
+            b.date.localeCompare(a.date) ||
+            b.createdAt.localeCompare(a.createdAt),
+        )
+        .slice(0, 5),
+    [entries],
+  );
+
+  const upcomingDeadlines = useMemo(
+    () =>
+      deadlines
+        .filter((d) => !d.done)
+        .sort((a, b) => (a.date ?? "9999").localeCompare(b.date ?? "9999"))
+        .slice(0, 3),
+    [deadlines],
+  );
+
+  const recentCons = useMemo(() => cons.slice(-8), [cons]);
+  const maxCons = useMemo(
+    () => Math.max(...recentCons.map((c) => c.value), 1),
+    [recentCons],
+  );
+  const avgConsValue = fStats.averageConsumption ?? (last ? last.value : 0);
+
   return (
     <>
       <div className="page-heading">
@@ -170,6 +272,7 @@ export function Dashboard({
           {fmtDate(today())}
         </span>
       </div>
+
       <div className="hero-row">
         <section className="vehicle-card">
           <div className="vehicle-card-top">
@@ -215,13 +318,7 @@ export function Dashboard({
               </div>
               {vehicle && (
                 <button
-                  className="secondary full"
-                  style={{
-                    marginTop: "15px",
-                    minHeight: "42px",
-                    gap: "8px",
-                    width: "100%",
-                  }}
+                  className="secondary full vehicle-report-btn"
                   onClick={() =>
                     void act(() =>
                       generateMaintenanceReport(
@@ -244,6 +341,7 @@ export function Dashboard({
             />
           </div>
         </section>
+
         <section className="quick-card">
           <p className="eyebrow">UN NOUVEL ÉVÉNEMENT ?</p>
           <h3>Ajoutez-le en quelques secondes.</h3>
@@ -290,6 +388,7 @@ export function Dashboard({
           </div>
         </section>
       </div>
+
       <div className="stats-grid">
         <button
           type="button"
@@ -300,12 +399,12 @@ export function Dashboard({
         >
           <span>
             Kilométrage connu
-            <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+            <span className="stat-icon-group">
               <Gauge size={18} />
               <ChevronRight size={15} className="stat-chevron" />
             </span>
           </span>
-          <strong>
+          <strong className="tabular-nums">
             {km !== undefined ? km.toLocaleString("fr-FR") : "—"}
             <small> km</small>
           </strong>
@@ -321,12 +420,12 @@ export function Dashboard({
         >
           <span>
             Dépenses du mois
-            <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+            <span className="stat-icon-group">
               <Wallet size={18} />
               <ChevronRight size={15} className="stat-chevron" />
             </span>
           </span>
-          <strong>
+          <strong className="tabular-nums">
             {money(
               total(monthEntries, state.settings.currency),
               state.settings.currency,
@@ -350,12 +449,12 @@ export function Dashboard({
         >
           <span>
             Consommation calculée
-            <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+            <span className="stat-icon-group">
               <Fuel size={18} />
               <ChevronRight size={15} className="stat-chevron" />
             </span>
           </span>
-          <strong>
+          <strong className="tabular-nums">
             {last ? fmtDecimal(last.value, 2) : fStats.lastConsumptionLabel}
             {last && <small> L/100 km</small>}
           </strong>
@@ -375,12 +474,12 @@ export function Dashboard({
         >
           <span>
             Distance des trajets
-            <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+            <span className="stat-icon-group">
               <Route size={18} />
               <ChevronRight size={15} className="stat-chevron" />
             </span>
           </span>
-          <strong>
+          <strong className="tabular-nums">
             {tripDistance(entries).toLocaleString("fr-FR")}
             <small> km</small>
           </strong>
@@ -388,7 +487,7 @@ export function Dashboard({
         </button>
       </div>
 
-      <section className="panel" style={{ marginBottom: "23px" }}>
+      <section className="panel panel-spaced">
         <div className="section-head">
           <div>
             <p className="eyebrow">SUIVI DU CARBURANT</p>
@@ -399,13 +498,17 @@ export function Dashboard({
             Ajouter un plein
           </button>
         </div>
-        <div className="stats-grid" style={{ marginBottom: fStats.analyses.length > 0 ? "18px" : "0" }}>
+        <div
+          className={`stats-grid ${fStats.analyses.length > 0 ? "stats-grid-tight" : "stats-grid-flush"}`}
+        >
           <div className="stat">
             <span>
               Montant total des dépenses de carburant
               <Wallet size={18} />
             </span>
-            <strong>{fmtAmount(fStats.totalAmount, currency)}</strong>
+            <strong className="tabular-nums">
+              {fmtAmount(fStats.totalAmount, currency)}
+            </strong>
             <p>{fStats.analyses.length} plein(s) enregistré(s)</p>
           </div>
           <div className="stat">
@@ -413,7 +516,9 @@ export function Dashboard({
               Quantité totale de carburant achetée
               <Fuel size={18} />
             </span>
-            <strong>{fmtLitres(fStats.totalLitres)}</strong>
+            <strong className="tabular-nums">
+              {fmtLitres(fStats.totalLitres)}
+            </strong>
             <p>Volume total acheté pour ce véhicule</p>
           </div>
           <div className="stat">
@@ -421,7 +526,9 @@ export function Dashboard({
               Dernière consommation calculée
               <Gauge size={18} />
             </span>
-            <strong style={{ fontSize: fStats.lastConsumption !== undefined ? "22px" : "15px" }}>
+            <strong
+              className={`tabular-nums ${fStats.lastConsumption !== undefined ? "stat-value-lg" : "stat-value-sm"}`}
+            >
               {fStats.lastConsumptionLabel}
             </strong>
             <p>
@@ -435,7 +542,9 @@ export function Dashboard({
               Consommation moyenne sur les intervalles valides
               <TrendingUp size={18} />
             </span>
-            <strong style={{ fontSize: fStats.averageConsumption !== undefined ? "22px" : "15px" }}>
+            <strong
+              className={`tabular-nums ${fStats.averageConsumption !== undefined ? "stat-value-lg" : "stat-value-sm"}`}
+            >
               {fStats.averageConsumptionLabel}
             </strong>
             <p>
@@ -447,35 +556,19 @@ export function Dashboard({
         </div>
 
         {fStats.analyses.length > 0 && (
-          <div style={{ overflowX: "auto" }}>
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: "12px",
-                textAlign: "left",
-              }}
-            >
+          <div className="data-table-scroll">
+            <table className="modern-data-table">
               <thead>
-                <tr
-                  style={{
-                    borderBottom: "1px solid var(--border)",
-                    color: "#728077",
-                    fontSize: "10px",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  <th style={{ padding: "8px 6px" }}>Date</th>
-                  <th style={{ padding: "8px 6px" }}>Véhicule</th>
-                  <th style={{ padding: "8px 6px" }}>Compteur (km)</th>
-                  <th style={{ padding: "8px 6px" }}>Distance (km)</th>
-                  <th style={{ padding: "8px 6px" }}>Montant ({currency})</th>
-                  <th style={{ padding: "8px 6px" }}>Prix/L</th>
-                  <th style={{ padding: "8px 6px" }}>Litres</th>
-                  <th style={{ padding: "8px 6px" }}>Plein complet</th>
-                  <th style={{ padding: "8px 6px" }}>
-                    Consommation (L/100 km)
-                  </th>
+                <tr>
+                  <th>Date</th>
+                  <th>Véhicule</th>
+                  <th>Compteur (km)</th>
+                  <th>Distance (km)</th>
+                  <th>Montant ({currency})</th>
+                  <th>Prix/L</th>
+                  <th>Litres</th>
+                  <th>Plein complet</th>
+                  <th>Consommation (L/100 km)</th>
                 </tr>
               </thead>
               <tbody>
@@ -485,23 +578,15 @@ export function Dashboard({
                     <tr
                       key={`dash-fuel-${e.id}`}
                       onClick={() => openEntry(e)}
-                      style={{
-                        borderBottom: "1px solid #edf0e6",
-                        cursor: "pointer",
-                      }}
                     >
-                      <td style={{ padding: "9px 6px", whiteSpace: "nowrap" }}>
-                        {fmtDate(e.date)}
-                      </td>
-                      <td style={{ padding: "9px 6px" }}>
-                        {vehicle?.name ?? "—"}
-                      </td>
-                      <td style={{ padding: "9px 6px", whiteSpace: "nowrap" }}>
+                      <td className="nowrap">{fmtDate(e.date)}</td>
+                      <td>{vehicle?.name ?? "—"}</td>
+                      <td className="nowrap tabular-nums">
                         {e.km !== undefined
                           ? `${e.km.toLocaleString("fr-FR")} km`
                           : "—"}
                       </td>
-                      <td style={{ padding: "9px 6px", whiteSpace: "nowrap" }}>
+                      <td className="nowrap tabular-nums">
                         {fa.kmError ? (
                           <span className="danger">
                             Erreur : kilométrage ≤ précédent
@@ -512,28 +597,22 @@ export function Dashboard({
                           "Données insuffisantes"
                         )}
                       </td>
-                      <td style={{ padding: "9px 6px", whiteSpace: "nowrap" }}>
+                      <td className="nowrap tabular-nums">
                         {e.amount !== undefined
                           ? fmtAmount(e.amount, currency)
                           : "—"}
                       </td>
-                      <td style={{ padding: "9px 6px", whiteSpace: "nowrap" }}>
+                      <td className="nowrap tabular-nums">
                         {e.unitPrice !== undefined
                           ? `${fmtDecimal(e.unitPrice, 3)} ${currency}/L`
                           : "—"}
                       </td>
-                      <td style={{ padding: "9px 6px", whiteSpace: "nowrap" }}>
+                      <td className="nowrap tabular-nums">
                         {e.quantity !== undefined ? fmtLitres(e.quantity) : "—"}
                       </td>
-                      <td style={{ padding: "9px 6px" }}>
-                        {e.full === true ? "Oui" : "Non"}
-                      </td>
+                      <td>{e.full === true ? "Oui" : "Non"}</td>
                       <td
-                        style={{
-                          padding: "9px 6px",
-                          fontWeight:
-                            fa.consumptionStatus === "valid" ? 600 : 400,
-                        }}
+                        className={`tabular-nums ${fa.consumptionStatus === "valid" ? "cell-bold" : ""}`}
                       >
                         {fa.consumptionLabel}
                       </td>
@@ -552,6 +631,7 @@ export function Dashboard({
           saisies ; elles ont été conservées.
         </p>
       )}
+
       <div className="content-grid">
         <section className="panel">
           <div className="section-head">
@@ -564,43 +644,36 @@ export function Dashboard({
               <ArrowRight size={16} />
             </button>
           </div>
-          {entries.length ? (
+          {recentActivities.length ? (
             <div className="activity-list">
-              {[...entries]
-                .sort(
-                  (a, b) =>
-                    b.date.localeCompare(a.date) ||
-                    b.createdAt.localeCompare(a.createdAt),
-                )
-                .slice(0, 5)
-                .map((e) => (
-                  <button
-                    className="activity-row"
-                    key={e.id}
-                    onClick={() => openEntry(e)}
-                  >
-                    <EntryIcon kind={e.kind} />
-                    <span className="activity-text">
-                      <strong>{e.title}</strong>
-                      <small>
-                        {labels[e.kind]} · {fmtDate(e.date)}
-                        {e.km !== undefined
-                          ? ` · ${e.km.toLocaleString("fr-FR")} km`
-                          : ""}
-                      </small>
-                    </span>
-                    <span className="activity-amount">
-                      {e.amount !== undefined
-                        ? money(e.amount, state.settings.currency)
-                        : e.kind === "trip" &&
-                            e.startKm !== undefined &&
-                            e.endKm !== undefined
-                          ? `${e.endKm - e.startKm} km`
-                          : ""}
-                      <ArrowRight size={15} />
-                    </span>
-                  </button>
-                ))}
+              {recentActivities.map((e) => (
+                <button
+                  className="activity-row"
+                  key={e.id}
+                  onClick={() => openEntry(e)}
+                >
+                  <EntryIcon kind={e.kind} />
+                  <span className="activity-text">
+                    <strong>{e.title}</strong>
+                    <small>
+                      {labels[e.kind]} · {fmtDate(e.date)}
+                      {e.km !== undefined
+                        ? ` · ${e.km.toLocaleString("fr-FR")} km`
+                        : ""}
+                    </small>
+                  </span>
+                  <span className="activity-amount tabular-nums">
+                    {e.amount !== undefined
+                      ? money(e.amount, state.settings.currency)
+                      : e.kind === "trip" &&
+                          e.startKm !== undefined &&
+                          e.endKm !== undefined
+                        ? `${e.endKm - e.startKm} km`
+                        : ""}
+                    <ArrowRight size={15} />
+                  </span>
+                </button>
+              ))}
             </div>
           ) : (
             <Empty
@@ -616,6 +689,7 @@ export function Dashboard({
             />
           )}
         </section>
+
         <section className="panel deadline-panel">
           <div className="section-head">
             <div>
@@ -624,37 +698,32 @@ export function Dashboard({
             </div>
             <CalendarDays size={23} />
           </div>
-          {deadlines.filter((d) => !d.done).length ? (
+          {upcomingDeadlines.length ? (
             <div className="deadline-list">
-              {deadlines
-                .filter((d) => !d.done)
-                .sort((a, b) =>
-                  (a.date ?? "9999").localeCompare(b.date ?? "9999"),
-                )
-                .slice(0, 3)
-                .map((d) => (
+              {upcomingDeadlines.map((d) => {
+                const st = status(d, km, state.settings, today());
+                return (
                   <button
                     className="deadline-item"
                     key={d.id}
                     onClick={openDeadlines}
                   >
                     <span
-                      className={`status-dot ${status(d, km, state.settings, today()) === "Dépassée" ? "red" : status(d, km, state.settings, today()) === "Bientôt" ? "amber" : "green"}`}
+                      className={`status-dot ${st === "Dépassée" ? "red" : st === "Bientôt" ? "amber" : "green"}`}
                     />
                     <span>
                       <strong>{d.title}</strong>
-                      <small>
+                      <small className="tabular-nums">
                         {d.date ? fmtDate(d.date) : "Kilométrage"}
                         {d.km !== undefined
                           ? ` · ${d.km.toLocaleString("fr-FR")} km`
                           : ""}
                       </small>
                     </span>
-                    <span className="tag">
-                      {status(d, km, state.settings, today())}
-                    </span>
+                    <span className="tag">{st}</span>
                   </button>
-                ))}
+                );
+              })}
             </div>
           ) : (
             <Empty
@@ -669,72 +738,135 @@ export function Dashboard({
           </button>
         </section>
       </div>
+
       <div className="content-grid charts">
         <section className="panel">
           <div className="section-head">
             <div>
               <p className="eyebrow">VOTRE BUDGET AUTO</p>
-              <h2>Les 6 derniers mois</h2>
+              <h2>
+                {chartHorizon === 6
+                  ? "Les 6 derniers mois"
+                  : "Les 12 derniers mois"}
+              </h2>
             </div>
-            <TrendingUp size={23} />
+            <div className="chart-horizon-toggle" role="group" aria-label="Période du graphique budget">
+              <button
+                type="button"
+                className={chartHorizon === 6 ? "active" : ""}
+                onClick={() => setChartHorizon(6)}
+              >
+                6 mois
+              </button>
+              <button
+                type="button"
+                className={chartHorizon === 12 ? "active" : ""}
+                onClick={() => setChartHorizon(12)}
+              >
+                12 mois
+              </button>
+            </div>
           </div>
-          <div className="bar-chart">
-            {months.map((m) => (
-              <div key={m.label}>
-                <small>
-                  {m.value ? money(m.value, state.settings.currency) : "—"}
-                </small>
-                <div className="bar-track">
-                  <div style={{ height: `${(m.value / maximum) * 100}%` }} />
-                </div>
-                <span>{m.label}</span>
+
+          {activeMonth && (
+            <div className="chart-inspect-bar">
+              <div>
+                <span className="chart-inspect-month">{activeMonth.fullLabel}</span>
+                <strong className="tabular-nums">
+                  {money(activeMonth.value, currency)}
+                </strong>
               </div>
-            ))}
+              <div className="chart-inspect-breakdown tabular-nums">
+                <span>
+                  <i className="dot-fuel" />
+                  Carburant : {money(activeMonth.fuelValue, currency)}
+                </span>
+                <span>
+                  <i className="dot-other" />
+                  Entretien & frais : {money(activeMonth.otherValue, currency)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="bar-chart interactive-bar-chart">
+            {months.map((m) => {
+              const isSelected = activeMonth?.key === m.key;
+              const pct = Math.max((m.value / maximum) * 100, m.value > 0 ? 6 : 0);
+              const fuelPct = m.value > 0 ? (m.fuelValue / m.value) * 100 : 0;
+              return (
+                <div
+                  key={m.key}
+                  className={`bar-column ${isSelected ? "selected" : ""}`}
+                  onMouseEnter={() => setSelectedMonthKey(m.key)}
+                  onClick={() => setSelectedMonthKey(m.key)}
+                >
+                  <small className="tabular-nums">
+                    {m.value ? money(m.value, currency) : "—"}
+                  </small>
+                  <div className="bar-track" title={`${m.fullLabel} : ${money(m.value, currency)} (${m.count} entrée(s))`}>
+                    <div
+                      className="bar-fill-stack"
+                      style={{ height: `${pct}%` }}
+                    >
+                      <div
+                        className="bar-segment-other"
+                        style={{ height: `${100 - fuelPct}%` }}
+                      />
+                      <div
+                        className="bar-segment-fuel"
+                        style={{ height: `${fuelPct}%` }}
+                      />
+                    </div>
+                  </div>
+                  <span>{m.label}</span>
+                </div>
+              );
+            })}
           </div>
           <p className="chart-note">
-            Total des montants enregistrés, regroupés par mois.
+            Moyenne sur les mois actifs :{" "}
+            <strong className="tabular-nums">{money(avgMonthSpend, currency)}</strong> · Survolez ou cliquez sur un mois pour inspecter la répartition.
           </p>
         </section>
+
         <section className="panel">
           <div className="section-head">
             <div>
               <p className="eyebrow">RÉPARTITION DES DÉPENSES</p>
               <h2>Cette année · {currentYear}</h2>
             </div>
-            <strong>
-              {money(
-                total(yearEntries, state.settings.currency),
-                state.settings.currency,
-              )}
+            <strong className="tabular-nums">
+              {money(total(yearEntries, currency), currency)}
             </strong>
           </div>
           {cats.length ? (
             <div className="category-chart">
-              {cats.map((c, i) => (
-                <div key={c.name}>
-                  <span>
-                    <i
-                      style={{
-                        background: [
-                          "#24594c",
-                          "#b69c55",
-                          "#799997",
-                          "#9b8775",
-                        ][i % 4],
-                      }}
-                    />
-                    {c.name}
-                    <b>{money(c.value, state.settings.currency)}</b>
-                  </span>
-                  <div>
-                    <i
-                      style={{
-                        width: `${catTotal ? (c.value / catTotal) * 100 : 0}%`,
-                      }}
-                    />
+              {cats.map((c, i) => {
+                const pct = catTotal ? Math.round((c.value / catTotal) * 100) : 0;
+                return (
+                  <div key={c.name} className="category-row">
+                    <span>
+                      <i
+                        style={{
+                          background: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+                        }}
+                      />
+                      {c.name}
+                      <small className="category-pct tabular-nums">({pct}%)</small>
+                      <b className="tabular-nums">{money(c.value, currency)}</b>
+                    </span>
+                    <div>
+                      <i
+                        style={{
+                          width: `${catTotal ? (c.value / catTotal) * 100 : 0}%`,
+                          background: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+                        }}
+                      />
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="chart-empty">
@@ -743,20 +875,60 @@ export function Dashboard({
           )}
         </section>
       </div>
+
       {cons.length > 0 && (
         <section className="panel">
           <div className="section-head">
-            <h2>Consommation entre pleins complets</h2>
-            <Fuel size={22} />
+            <div>
+              <p className="eyebrow">ANALYSE ÉNERGÉTIQUE</p>
+              <h2>Consommation entre pleins complets</h2>
+            </div>
+            <div className="cons-avg-indicator tabular-nums">
+              <BarChart3 size={17} />
+              <span>Moyenne : {fmtDecimal(avgConsValue, 2)} L/100 km</span>
+            </div>
           </div>
+
+          {recentCons.length > 1 && (
+            <div className="cons-visual-bars">
+              {recentCons.map((c, idx) => {
+                const heightPct = Math.max((c.value / maxCons) * 100, 14);
+                const isSelected = selectedConsIndex === idx;
+                const isAboveAvg = avgConsValue > 0 && c.value > avgConsValue * 1.05;
+                return (
+                  <button
+                    type="button"
+                    key={`${c.from}-${c.date}-${idx}`}
+                    className={`cons-bar-item ${isSelected ? "active" : ""} ${isAboveAvg ? "high" : "optimal"}`}
+                    onClick={() =>
+                      setSelectedConsIndex(isSelected ? null : idx)
+                    }
+                    title={`${fmtDate(c.from)} → ${fmtDate(c.date)} : ${fmtDecimal(c.value, 2)} L/100 km`}
+                  >
+                    <small className="tabular-nums">{fmtDecimal(c.value, 2)}</small>
+                    <div className="cons-bar-track">
+                      <div
+                        className="cons-bar-fill"
+                        style={{ height: `${heightPct}%` }}
+                      />
+                    </div>
+                    <span>{fmtDate(c.date)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div className="consumption-list">
             {cons.slice(-6).map((c, i) => (
-              <div key={i}>
-                <strong>{fmtDecimal(c.value, 2)} L/100 km</strong>
+              <div key={i} className="consumption-card">
+                <strong className="tabular-nums">
+                  {fmtDecimal(c.value, 2)} L/100 km
+                </strong>
                 <span>
                   {fmtDate(c.from)} → {fmtDate(c.date)}
                 </span>
-                <small>
+                <small className="tabular-nums">
                   {fmtDecimal(c.litres, 3)} L ÷ {c.distance} km × 100 · pleins
                   intermédiaires compris
                 </small>
@@ -765,6 +937,7 @@ export function Dashboard({
           </div>
         </section>
       )}
+
       <p className="footer-note">
         <ShieldCheck size={14} />
         Un carnet personnel, sans compte. Pensez à sauvegarder vos données.

@@ -5,7 +5,7 @@ import { MileageScreen } from "./MileageScreen";
 import { ExpensesScreen } from "./ExpensesScreen";
 import { FuelScreen } from "./FuelScreen";
 import { TripsScreen } from "./TripsScreen";
-import { useEffect, useRef, useState, lazy, Suspense } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback, lazy, Suspense } from "react";
 import {
   Car,
   House,
@@ -404,30 +404,45 @@ export default function App({ initialUser }: AppProps = {}) {
     if (isTestEnv || !currentUser) return;
     void tryBackgroundSync(next, currentUser.uid);
   }
-  const vehicle =
-    state.vehicles.find((v) => v.id === state.settings.selectedVehicle) ??
-    state.vehicles[0];
-  const entries = state.entries.filter((e) => e.vehicleId === vehicle?.id);
-  const deadlines = [
-    ...state.deadlines.filter((d) => d.vehicleId === vehicle?.id),
-    ...derivedDeadlines(entries),
-  ];
-  const km = vehicle ? currentKm(vehicle, entries) : undefined;
-  const act = async (fn: () => Promise<void>) => {
+  const vehicle = useMemo(
+    () =>
+      state.vehicles.find((v) => v.id === state.settings.selectedVehicle) ??
+      state.vehicles[0],
+    [state.vehicles, state.settings.selectedVehicle],
+  );
+  const entries = useMemo(
+    () => state.entries.filter((e) => e.vehicleId === vehicle?.id),
+    [state.entries, vehicle?.id],
+  );
+  const deadlines = useMemo(
+    () => [
+      ...state.deadlines.filter((d) => d.vehicleId === vehicle?.id),
+      ...derivedDeadlines(entries),
+    ],
+    [state.deadlines, vehicle?.id, entries],
+  );
+  const km = useMemo(
+    () => (vehicle ? currentKm(vehicle, entries) : undefined),
+    [vehicle, entries],
+  );
+  const act = useCallback(async (fn: () => Promise<void>) => {
     try {
       await fn();
     } catch (e) {
       showError(e);
     }
-  };
-  const add = (kind: Kind) => {
-    if (!vehicle) {
-      setModal({ type: "vehicle" });
-      setNotice("Ajoutez d’abord votre véhicule.");
-      return;
-    }
-    setModal({ type: "entry", kind });
-  };
+  }, []);
+  const add = useCallback(
+    (kind: Kind) => {
+      if (!vehicle) {
+        setModal({ type: "vehicle" });
+        setNotice("Ajoutez d’abord votre véhicule.");
+        return;
+      }
+      setModal({ type: "entry", kind });
+    },
+    [vehicle],
+  );
   async function saveVehicle(v: Vehicle) {
     if (currentUser) {
       v.userId = currentUser.uid;
@@ -542,36 +557,40 @@ export default function App({ initialUser }: AppProps = {}) {
       await storage.removeAttachment(e.attachmentId);
     setModal(null);
   }
-  const filtered = entries
-    .filter(
-      (e) =>
-        (page !== "documents" || e.kind === "document" || e.attachmentId) &&
-        (filter === "all" || e.kind === filter) &&
-        (!from || e.date >= from) &&
-        (!to || e.date <= to) &&
-        [
-          e.title,
-          e.notes,
-          e.garage,
-          e.reference,
-          e.category,
-          e.origin,
-          e.destination,
-        ]
-          .join(" ")
-          .toLocaleLowerCase("fr")
-          .includes(search.toLocaleLowerCase("fr")),
-    )
-    .sort((a, b) =>
-      sort === "title"
-        ? a.title.localeCompare(b.title, "fr")
-        : sort === "amount"
-          ? (b.amount ?? -1) - (a.amount ?? -1)
-          : sort === "asc"
-            ? a.date.localeCompare(b.date)
-            : b.date.localeCompare(a.date) ||
-              b.createdAt.localeCompare(a.createdAt),
-    );
+  const filtered = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase("fr");
+    return entries
+      .filter(
+        (e) =>
+          (page !== "documents" || e.kind === "document" || e.attachmentId) &&
+          (filter === "all" || e.kind === filter) &&
+          (!from || e.date >= from) &&
+          (!to || e.date <= to) &&
+          (!query ||
+            [
+              e.title,
+              e.notes,
+              e.garage,
+              e.reference,
+              e.category,
+              e.origin,
+              e.destination,
+            ]
+              .join(" ")
+              .toLocaleLowerCase("fr")
+              .includes(query)),
+      )
+      .sort((a, b) =>
+        sort === "title"
+          ? a.title.localeCompare(b.title, "fr")
+          : sort === "amount"
+            ? (b.amount ?? -1) - (a.amount ?? -1)
+            : sort === "asc"
+              ? a.date.localeCompare(b.date)
+              : b.date.localeCompare(a.date) ||
+                b.createdAt.localeCompare(a.createdAt),
+      );
+  }, [entries, page, filter, from, to, search, sort]);
   const navigation = [
     { id: "home" as Page, label: "Accueil", icon: House },
     { id: "journal" as Page, label: "Carnet", icon: BookOpen },
@@ -860,99 +879,101 @@ export default function App({ initialUser }: AppProps = {}) {
               appareil.
             </p>
           )}
-          {page === "home" ? (
-            <Dashboard
-              state={state}
-              vehicle={vehicle}
-              entries={entries}
-              deadlines={deadlines}
-              add={add}
-              openVehicle={() => setModal({ type: "vehicle", vehicle })}
-              openEntry={(entry) => setModal({ type: "detail", entry })}
-              openCarnet={() => setPage("journal")}
-              openDeadlines={() => setPage("deadlines")}
-              openMileage={() => setPage("mileage")}
-              openExpenses={() => setPage("expenses")}
-              openFuel={() => setPage("fuel")}
-              openTrips={() => setPage("trips")}
-              act={act}
-            />
-          ) : page === "mileage" ? (
-            <MileageScreen
-              vehicle={vehicle}
-              entries={entries}
-              openEntry={(entry) => setModal({ type: "detail", entry })}
-              openVehicle={() => setModal({ type: "vehicle", vehicle })}
-              onBack={() => setPage("home")}
-              add={add}
-            />
-          ) : page === "expenses" ? (
-            <ExpensesScreen
-              vehicle={vehicle}
-              entries={entries}
-              currency={state.settings.currency}
-              openEntry={(entry) => setModal({ type: "detail", entry })}
-              onBack={() => setPage("home")}
-              add={add}
-            />
-          ) : page === "fuel" ? (
-            <FuelScreen
-              vehicle={vehicle}
-              entries={entries}
-              currency={state.settings.currency}
-              openEntry={(entry) => setModal({ type: "detail", entry })}
-              onBack={() => setPage("home")}
-              add={add}
-            />
-          ) : page === "trips" ? (
-            <TripsScreen
-              vehicle={vehicle}
-              entries={entries}
-              openEntry={(entry) => setModal({ type: "detail", entry })}
-              onBack={() => setPage("home")}
-              add={add}
-            />
-          ) : page === "journal" || page === "documents" ? (
-            <JournalScreen
-              {...{
-                state,
-                vehicle,
-                page,
-                filtered,
-                entries,
-                search,
-                setSearch,
-                filter,
-                setFilter,
-                from,
-                setFrom,
-                to,
-                setTo,
-                sort,
-                setSort,
-                view,
-                setView,
-                limit,
-                setLimit,
-                add,
-                setModal,
-                act,
-              }}
-            />
-          ) : (
-            <DeadlinesScreen
-              {...{
-                state,
-                vehicle,
-                entries,
-                deadlines,
-                km,
-                setModal,
-                act,
-                commit,
-              }}
-            />
-          )}
+          <div className="page-transition" key={page}>
+            {page === "home" ? (
+              <Dashboard
+                state={state}
+                vehicle={vehicle}
+                entries={entries}
+                deadlines={deadlines}
+                add={add}
+                openVehicle={() => setModal({ type: "vehicle", vehicle })}
+                openEntry={(entry) => setModal({ type: "detail", entry })}
+                openCarnet={() => setPage("journal")}
+                openDeadlines={() => setPage("deadlines")}
+                openMileage={() => setPage("mileage")}
+                openExpenses={() => setPage("expenses")}
+                openFuel={() => setPage("fuel")}
+                openTrips={() => setPage("trips")}
+                act={act}
+              />
+            ) : page === "mileage" ? (
+              <MileageScreen
+                vehicle={vehicle}
+                entries={entries}
+                openEntry={(entry) => setModal({ type: "detail", entry })}
+                openVehicle={() => setModal({ type: "vehicle", vehicle })}
+                onBack={() => setPage("home")}
+                add={add}
+              />
+            ) : page === "expenses" ? (
+              <ExpensesScreen
+                vehicle={vehicle}
+                entries={entries}
+                currency={state.settings.currency}
+                openEntry={(entry) => setModal({ type: "detail", entry })}
+                onBack={() => setPage("home")}
+                add={add}
+              />
+            ) : page === "fuel" ? (
+              <FuelScreen
+                vehicle={vehicle}
+                entries={entries}
+                currency={state.settings.currency}
+                openEntry={(entry) => setModal({ type: "detail", entry })}
+                onBack={() => setPage("home")}
+                add={add}
+              />
+            ) : page === "trips" ? (
+              <TripsScreen
+                vehicle={vehicle}
+                entries={entries}
+                openEntry={(entry) => setModal({ type: "detail", entry })}
+                onBack={() => setPage("home")}
+                add={add}
+              />
+            ) : page === "journal" || page === "documents" ? (
+              <JournalScreen
+                {...{
+                  state,
+                  vehicle,
+                  page,
+                  filtered,
+                  entries,
+                  search,
+                  setSearch,
+                  filter,
+                  setFilter,
+                  from,
+                  setFrom,
+                  to,
+                  setTo,
+                  sort,
+                  setSort,
+                  view,
+                  setView,
+                  limit,
+                  setLimit,
+                  add,
+                  setModal,
+                  act,
+                }}
+              />
+            ) : (
+              <DeadlinesScreen
+                {...{
+                  state,
+                  vehicle,
+                  entries,
+                  deadlines,
+                  km,
+                  setModal,
+                  act,
+                  commit,
+                }}
+              />
+            )}
+          </div>
         </main>
       </div>
       <nav className="bottom-nav">

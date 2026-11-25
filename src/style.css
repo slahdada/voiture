@@ -1,26 +1,32 @@
 @import "tailwindcss";
 :root {
   font-family:
-    Inter,
+    "Plus Jakarta Sans",
     ui-sans-serif,
     -apple-system,
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-  color: #24392f;
+  color: #1f342b;
   background: #f5f6f2;
   font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   --green: #194c3f;
-  --muted: #728077;
-  --border: #e4e8e0;
+  --green-hover: #133c31;
+  --muted: #63735e;
+  --border: #e2e7dd;
   --cream: #ebefb9;
-  --radius: 17px;
+  --radius: 16px;
 }
 * {
   box-sizing: border-box;
 }
 body {
   margin: 0;
+}
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 button,
 input,
@@ -2385,4 +2391,359 @@ small,
   flex-wrap: wrap;
   gap: 14px;
 }
+
+/* Smooth Screen Transitions & Micro-interactions */
+@keyframes pageFadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-transition {
+  animation: pageFadeSlideIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.vehicle-report-btn {
+  margin-top: 15px;
+  min-height: 42px;
+  gap: 8px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: #ffffff;
+  backdrop-filter: blur(6px);
+}
+.vehicle-report-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.stat-icon-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.panel-spaced {
+  margin-bottom: 23px;
+}
+
+.stats-grid-tight {
+  margin-bottom: 18px;
+}
+
+.stats-grid-flush {
+  margin-bottom: 0;
+}
+
+.stat-value-lg {
+  font-size: 22px !important;
+}
+
+.stat-value-sm {
+  font-size: 15px !important;
+}
+
+/* Modern High-Density Data Tables */
+.data-table-scroll {
+  overflow-x: auto;
+  margin-top: 6px;
+}
+
+.modern-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+
+.modern-data-table thead tr {
+  border-bottom: 1px solid var(--border);
+  color: #63735e;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  background: #fafbf8;
+}
+
+.modern-data-table th {
+  padding: 10px 8px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.modern-data-table tbody tr {
+  border-bottom: 1px solid #edf0e6;
+  cursor: pointer;
+  transition: background-color 0.14s ease;
+}
+
+.modern-data-table tbody tr:hover {
+  background-color: #f4f7f0;
+}
+
+.modern-data-table td {
+  padding: 10px 8px;
+}
+
+.modern-data-table td.nowrap {
+  white-space: nowrap;
+}
+
+.modern-data-table td.cell-bold {
+  font-weight: 600;
+  color: var(--green);
+}
+
+/* Journal Fuel Block & Search Clear */
+.journal-fuel-table-block {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.journal-fuel-table-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.journal-fuel-table-head strong {
+  font-size: 13px;
+  color: var(--green);
+}
+
+.search-clear-btn {
+  min-height: 26px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  color: #63735e;
+  background: #e9ede3;
+}
+
+.filter-reset-active {
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+/* Interactive Budget & Consumption Charts */
+.chart-horizon-toggle {
+  display: inline-flex;
+  background: #f1f3ec;
+  padding: 3px;
+  border-radius: 8px;
+  gap: 2px;
+}
+
+.chart-horizon-toggle button {
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #63735e;
+  border-radius: 6px;
+}
+
+.chart-horizon-toggle button.active {
+  background: #ffffff;
+  color: var(--green);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.chart-inspect-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #f7f9f4;
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
+.chart-inspect-month {
+  font-size: 11px;
+  color: #63735e;
+  text-transform: capitalize;
+  margin-right: 8px;
+}
+
+.chart-inspect-bar strong {
+  font-size: 14px;
+  color: var(--green);
+}
+
+.chart-inspect-breakdown {
+  display: flex;
+  gap: 14px;
+  font-size: 11px;
+  color: #556657;
+}
+
+.chart-inspect-breakdown span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.dot-fuel,
+.dot-other {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.dot-fuel {
+  background: #194c3f;
+}
+
+.dot-other {
+  background: #b69c55;
+}
+
+.interactive-bar-chart .bar-column {
+  cursor: pointer;
+  padding: 4px 2px;
+  border-radius: 8px;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.interactive-bar-chart .bar-column:hover,
+.interactive-bar-chart .bar-column.selected {
+  background-color: #f4f7ef;
+}
+
+.interactive-bar-chart .bar-column.selected span {
+  color: var(--green);
+  font-weight: 700;
+}
+
+.bar-fill-stack {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  border-radius: 5px;
+  overflow: hidden;
+  transition: height 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bar-segment-fuel {
+  width: 100%;
+  background: #194c3f;
+  transition: height 0.25s ease;
+}
+
+.bar-segment-other {
+  width: 100%;
+  background: #b69c55;
+  transition: height 0.25s ease;
+}
+
+.category-pct {
+  color: #7b8a74;
+  font-size: 10px;
+}
+
+.cons-avg-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--green);
+  background: #eef3e9;
+  padding: 6px 12px;
+  border-radius: 8px;
+}
+
+.cons-visual-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  height: 130px;
+  padding: 12px 14px;
+  background: #fafbf8;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+}
+
+.cons-bar-item {
+  flex: 1;
+  min-width: 58px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px;
+  border-radius: 8px;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.cons-bar-item.active {
+  background: #edf3e8;
+}
+
+.cons-bar-track {
+  width: 28px;
+  height: 68px;
+  background: #eef1e8;
+  border-radius: 5px;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.cons-bar-fill {
+  width: 100%;
+  background: #194c3f;
+  border-radius: 5px;
+  transition: height 0.2s ease;
+}
+
+.cons-bar-item.high .cons-bar-fill {
+  background: #b69c55;
+}
+
+.cons-bar-item span {
+  font-size: 9px;
+  color: #63735e;
+  white-space: nowrap;
+}
+
+.consumption-card {
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.consumption-card:hover {
+  border-color: #b7c7b8;
+  transform: translateY(-1px);
+}
+
+.activity-row,
+.entry-row,
+.deadline-item {
+  transition: background-color 0.14s ease;
+}
+
+.activity-row:hover,
+.entry-table .entry-row:hover,
+.deadline-item:hover {
+  background-color: #f7f9f4;
+}
+
 
